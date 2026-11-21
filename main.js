@@ -37,9 +37,13 @@
   const canvas = $('arena');
   const renderer = new ArenaRenderer(canvas);
   const keys = new Set();
-  const touchKeys = new Set();
-  const held = { shoot: false, skill: false, dash: false };
+  const joystick = $('joystick');
+  const joystickThumb = $('joystickThumb');
+  const stick = { pointerId: null, x: 0, y: 0 };
+  const held = { shoot: new Set(), skill: new Set(), dash: new Set() };
   const pendingActions = new Set();
+  let touchMode = matchMedia('(pointer: coarse)').matches ||
+    (navigator.maxTouchPoints > 0 && !matchMedia('(any-pointer: fine)').matches);
   let displayedWeapon;
   let selected = 'random', selectedMap = 'forest', game, paused = false, autoAim = true, spectating = false;
   let round = 1, savedResult = false, lastFrame = 0, uiClock = 0, eventId = 0, lastSound = 0;
@@ -126,7 +130,31 @@
       });
     });
   }
-  function clearInput() { keys.clear(); touchKeys.clear(); pendingActions.clear(); Object.keys(held).forEach(k => held[k] = false); }
+  function centerStick() {
+    stick.pointerId = null;
+    stick.x = 0;
+    stick.y = 0;
+    joystick.style.removeProperty('--stick-x');
+    joystick.style.removeProperty('--stick-y');
+  }
+  function clearInput() {
+    keys.clear();
+    pendingActions.clear();
+    Object.values(held).forEach(pointers => pointers.clear());
+    centerStick();
+  }
+  function syncInputLayout() {
+    document.documentElement.classList.toggle('touch-mode', touchMode);
+    document.documentElement.classList.toggle('touch-battle', touchMode && game.started);
+    const directions = touchMode ? '左手摇杆移动，右手按钮使用道具、技能和冲刺。' : 'WASD 移动，剑刃触敌自动攻击，J 使用手中物品。';
+    canvas.setAttribute('aria-label', maps[game.map].name + '对战场地，' + directions);
+  }
+  function setTouchMode(value) {
+    if (touchMode === value) return;
+    clearInput();
+    touchMode = value;
+    syncInputLayout();
+  }
   function reset(startImmediately) {
     sound.stop(); lastSound = 0;
     clearInput(); paused = false; spectating = false; savedResult = false; eventId = 0;
@@ -137,7 +165,6 @@
     document.body.dataset.arena = game.map;
     document.title = '方块竞技场 · ' + map.name;
     $('mapTitle').textContent = map.name;
-    canvas.setAttribute('aria-label', map.name + '对战场地，WASD 移动，剑刃触敌自动攻击，J 使用手中物品。');
     $('matchRules').textContent = '与 ' + (game.actors.length - 1) + ' 名电脑角色对战，最后存活者获胜。' +
       (game.map === 'ice' ? ' 冰面会打滑，深蓝色冰脊可作掩体。' : game.map === 'third' ? ' 从西、南洞口进入山体；附魔书拾取即生效。' : '');
     mapButtons.forEach(button => {
@@ -158,7 +185,7 @@
     });
     $('difficulty').disabled = !!startImmediately;
     $('matchBadge').textContent = `第 ${round} 局`;
-    buildRoster(); if (startImmediately) game.start(); updateUI();
+    buildRoster(); if (startImmediately) game.start(); syncInputLayout(); updateUI();
     renderer.render(game, { reducedMotion });
     if (startImmediately) canvas.focus({ preventScroll: true });
   }
@@ -167,7 +194,7 @@
     $('startBtn').hidden = true; $('difficulty').disabled = true; document.body.classList.add('in-match');
     document.querySelectorAll('.character-card').forEach(b => b.disabled = true);
     mapButtons.forEach(button => { button.disabled = true; });
-    game.start(); playUI('click'); canvas.focus({ preventScroll: true }); updateUI();
+    game.start(); syncInputLayout(); playUI('click'); canvas.focus({ preventScroll: true }); updateUI();
   }
   function restart() { round++; reset(true); playUI('click'); }
   function setPause(value) {
@@ -189,23 +216,24 @@
     clearInput(); updateUI();
   }
   function toggleAim() {
+    if (touchMode) return;
     autoAim = !autoAim; $('aimLabel').textContent = autoAim ? '自动瞄准' : '鼠标瞄准';
     $('aimBtn').setAttribute('aria-label', autoAim ? '切换为鼠标瞄准' : '切换为自动瞄准');
   }
   function currentInput() {
-    const down = (...codes) => codes.some(c => keys.has(c) || touchKeys.has(c));
-    if (autoAim) {
+    const down = (...codes) => codes.some(c => keys.has(c));
+    if (touchMode || autoAim) {
       const targets = game.actors.filter(a => a.alive && !a.isPlayer);
       targets.sort((a, b) => Math.hypot(a.x-game.player.x, a.y-game.player.y) - Math.hypot(b.x-game.player.x, b.y-game.player.y));
       if (targets[0]) { aimX = targets[0].x; aimY = targets[0].y; }
     }
     const controls = {
-      x: Number(down('KeyD', 'ArrowRight')) - Number(down('KeyA', 'ArrowLeft')),
-      y: Number(down('KeyS', 'ArrowDown')) - Number(down('KeyW', 'ArrowUp')),
+      x: touchMode ? stick.x : Number(down('KeyD', 'ArrowRight')) - Number(down('KeyA', 'ArrowLeft')),
+      y: touchMode ? stick.y : Number(down('KeyS', 'ArrowDown')) - Number(down('KeyW', 'ArrowUp')),
       aimX, aimY,
-      shoot: activeHand(game.player.weapon) && (held.shoot || down('KeyJ', 'KeyK') || pendingActions.has('shoot')),
-      skill: held.skill || down('KeyQ') || pendingActions.has('skill'),
-      dash: held.dash || down('Space') || pendingActions.has('dash')
+      shoot: activeHand(game.player.weapon) && (held.shoot.size > 0 || down('KeyJ', 'KeyK') || pendingActions.has('shoot')),
+      skill: held.skill.size > 0 || down('KeyQ') || pendingActions.has('skill'),
+      dash: held.dash.size > 0 || down('Space') || pendingActions.has('dash')
     };
     pendingActions.clear();
     return controls;
@@ -298,6 +326,7 @@
   }
   const gameCodes = new Set(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','KeyJ','KeyK','KeyQ','KeyR','KeyE','Escape']);
   addEventListener('keydown', e => {
+    if (gameCodes.has(e.code) || e.code === 'Tab' || e.code === 'Enter') setTouchMode(false);
     if ($('helpDialog').open) return;
     if (!game.started && e.target !== canvas) return;
     if (gameCodes.has(e.code)) e.preventDefault();
@@ -315,33 +344,67 @@
   addEventListener('blur', () => { clearInput(); if (game.started && !game.finished) setPause(true); });
   document.addEventListener('visibilitychange', () => { if (document.hidden) { clearInput(); setPause(true); } });
   function aimAtPointer(e) {
-    if (autoAim) return;
+    if (touchMode || autoAim || e.pointerType !== 'mouse') return;
     const rect = canvas.getBoundingClientRect(); aimX = (e.clientX - rect.left) / rect.width * 720; aimY = (e.clientY - rect.top) / rect.height * 960;
   }
+  addEventListener('pointerdown', e => {
+    if (e.pointerType) setTouchMode(e.pointerType !== 'mouse');
+  }, {capture: true, passive: true});
+  addEventListener('pointermove', e => {
+    if (touchMode && stick.pointerId === null && e.pointerType === 'mouse' && (e.movementX || e.movementY)) setTouchMode(false);
+  }, {capture: true, passive: true});
   canvas.addEventListener('pointermove', aimAtPointer);
   canvas.addEventListener('pointerdown', e => {
-    if (!game.started || paused || !game.player.alive) return;
+    if (touchMode || !game.started || paused || !game.player.alive) return;
     canvas.focus({ preventScroll: true });
     if (activeHand(game.player.weapon) && (e.button === 0 || e.button === 2)) {
       aimAtPointer(e);
-      held.shoot = true; pendingActions.add('shoot');
+      held.shoot.add(e.pointerId); pendingActions.add('shoot');
     }
   });
   canvas.addEventListener('contextmenu', e => e.preventDefault());
-  addEventListener('pointerup', () => { Object.keys(held).forEach(k => held[k] = false); });
-  addEventListener('pointercancel', clearInput);
+  function releasePointer(e) {
+    if (e.pointerId === stick.pointerId) centerStick();
+    Object.values(held).forEach(pointers => pointers.delete(e.pointerId));
+  }
+  addEventListener('pointerup', releasePointer);
+  addEventListener('pointercancel', releasePointer);
+  addEventListener('lostpointercapture', releasePointer);
   [['attackBtn','shoot'],['skillBtn','skill'],['dashBtn','dash']].forEach(([id,key]) => {
-    $(id).addEventListener('pointerdown', e => { if (!$(id).disabled) { e.preventDefault(); held[key] = true; pendingActions.add(key); $(id).setPointerCapture(e.pointerId); } });
-    $(id).addEventListener('pointerup', () => held[key] = false);
-    $(id).addEventListener('lostpointercapture', () => held[key] = false);
-    $(id).addEventListener('click', e => { if (e.detail === 0) pendingActions.add(key); });
+    const button = $(id);
+    button.addEventListener('pointerdown', e => {
+      if (button.disabled) return;
+      e.preventDefault();
+      if (!touchMode) held[key].add(e.pointerId);
+      pendingActions.add(key);
+      button.setPointerCapture(e.pointerId);
+    });
+    button.addEventListener('click', e => { if (e.detail === 0) pendingActions.add(key); });
   });
-  const directionCodes = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' };
-  document.querySelectorAll('[data-direction]').forEach(button => {
-    const key = directionCodes[button.dataset.direction];
-    button.addEventListener('pointerdown', e => { e.preventDefault(); touchKeys.add(key); button.setPointerCapture(e.pointerId); });
-    const release = () => touchKeys.delete(key);
-    button.addEventListener('pointerup', release); button.addEventListener('pointercancel', release); button.addEventListener('lostpointercapture', release);
+  function moveStick(e) {
+    const bounds = joystick.getBoundingClientRect();
+    const radius = Math.max(1, (bounds.width - joystickThumb.offsetWidth) / 2);
+    const dx = e.clientX - bounds.left - bounds.width / 2;
+    const dy = e.clientY - bounds.top - bounds.height / 2;
+    const distance = Math.hypot(dx, dy);
+    const extent = Math.min(distance / radius, 1);
+    const directionX = dx / (distance || 1), directionY = dy / (distance || 1);
+    // A small central dead zone lets a resting thumb stop without lifting.
+    const strength = Math.max(0, (extent - 0.12) / 0.88);
+    stick.x = directionX * strength;
+    stick.y = directionY * strength;
+    joystick.style.setProperty('--stick-x', directionX * extent * radius + 'px');
+    joystick.style.setProperty('--stick-y', directionY * extent * radius + 'px');
+  }
+  joystick.addEventListener('pointerdown', e => {
+    if (!touchMode || stick.pointerId !== null || !game.started || paused || !game.player.alive) return;
+    e.preventDefault();
+    stick.pointerId = e.pointerId;
+    joystick.setPointerCapture(e.pointerId);
+    moveStick(e);
+  });
+  joystick.addEventListener('pointermove', e => {
+    if (e.pointerId === stick.pointerId) moveStick(e);
   });
   $('startBtn').onclick = start; $('againBtn').onclick = restart; $('pauseRestartBtn').onclick = restart;
   $('pauseBtn').onclick = () => setPause(!paused); $('resumeBtn').onclick = () => setPause(false);
@@ -361,7 +424,7 @@
   soundButton(); buildMapPicker(); buildCharacters(); reset(false); requestAnimationFrame(frame);
   // Read-only snapshots support regression checks without changing gameplay state.
   window.blockArena = Object.freeze({ audioStatus: () => sound.status(), snapshot: () => ({
-    map: game.map, status: game.status, paused, autoAim, time: game.time, remaining: game.remaining,
+    map: game.map, status: game.status, paused, autoAim: touchMode || autoAim, time: game.time, remaining: game.remaining,
     character: game.player.type, selection: selected, round, countdown: game.countdown, player: { ...game.player },
     actors: game.actors.map(({ type, hp, maxHp }) => ({ type, hp, maxHp })),
     webs: game.webs.map(({ ownerId, x, y, radius }) => ({ ownerId, x, y, radius })),

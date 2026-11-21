@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#101915">
   <title>方块竞技场</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=touch-1">
 </head>
 <body>
   <div class="app-shell">
@@ -39,7 +39,7 @@
           <strong><i class="live-dot"></i><span id="mapTitle">林间水池</span></strong>
           <div class="match-time"><span id="phaseLabel">待开局</span><time id="timer">00:00</time><button id="pauseBtn" aria-label="暂停游戏" title="暂停 / 继续（Esc）">Ⅱ</button></div>
         </div>
-        <div class="arena-wrap" id="arenaWrap">
+        <div class="arena-stage"><div class="arena-wrap" id="arenaWrap">
           <canvas id="arena" width="720" height="960" tabindex="0" aria-label="对战场地"></canvas>
           <div class="arena-top-hud"><span id="matchBadge">第 1 局</span><span id="slowStatus" hidden></span><span id="dropTimer" hidden></span></div>
           <div id="countdown" class="countdown" hidden></div>
@@ -51,9 +51,10 @@
             <div class="result-stats"><div><strong id="resultKills">0</strong><span>淘汰</span></div><div><strong id="resultTime">00:00</strong><span>存活时间</span></div></div>
             <button id="againBtn" class="primary-button">再来一局</button><button id="chooseBtn" class="secondary-button">返回选图 / 选角</button><button id="spectateBtn" class="text-button">继续观战</button>
           </div>
-        </div>
+        </div></div>
         <div class="player-dock">
           <div class="player-vitals"><span class="caption">生命</span><div><span id="playerHealth" class="hearts">♥ ♥ ♥</span><span id="playerShield" class="shield-count"></span><img id="playerTotem" src="assets/totem-reference.png" alt="已携带不死图腾" title="已携带不死图腾" width="17" height="17" hidden></div><small id="buffStatus" hidden></small></div>
+          <div id="joystick" role="group" aria-label="移动摇杆"><span id="joystickThumb" aria-hidden="true"></span></div>
           <div class="ability-slots">
             <button id="attackBtn" class="ability weapon-slot" disabled><canvas id="heldIcon" width="30" height="30" aria-hidden="true"></canvas><span><b id="attackState">空手</b><small id="weaponAction">拾剑可近战</small></span><kbd id="weaponKey" hidden>J</kbd></button>
             <button id="skillBtn" class="ability"><b id="skillAction">技能</b><kbd>Q</kbd><small id="skillState">就绪</small></button>
@@ -61,7 +62,6 @@
           </div>
         </div>
         <div class="below-arena"><button id="aimBtn"><i class="live-dot"></i><span id="aimLabel">自动瞄准</span> <kbd>E</kbd></button><span><kbd>WASD</kbd> 移动</span></div>
-        <div class="touch-controls" aria-label="触屏方向键"><button data-direction="left" aria-label="向左">←</button><button data-direction="up" aria-label="向上">↑</button><button data-direction="down" aria-label="向下">↓</button><button data-direction="right" aria-label="向右">→</button></div>
       </section>
       <aside class="right-column">
         <section class="panel items-panel"><h2>场地道具</h2><div id="itemList"></div></section>
@@ -72,7 +72,7 @@
   <dialog id="helpDialog">
     <button id="closeHelpBtn" class="dialog-close" aria-label="关闭">×</button><h2>操作说明</h2>
     <p id="matchRules"></p>
-    <dl class="control-list">
+    <dl class="control-list keyboard-help">
       <div><dt><kbd>WASD</kbd> / <kbd>↑↓←→</kbd></dt><dd>移动</dd></div>
       <div><dt>持剑移动或转向</dt><dd>剑刃触敌，自动攻击一次</dd></div>
       <div><dt>鼠标左 / 右键 · <kbd>J</kbd> / <kbd>K</kbd></dt><dd>射击、投掷、饮用治疗药水或放置 TNT</dd></div>
@@ -80,9 +80,15 @@
       <div><dt><kbd>E</kbd></dt><dd>切换自动瞄准和鼠标瞄准</dd></div>
       <div><dt><kbd>Esc</kbd> / <kbd>R</kbd></dt><dd>暂停 / 重开</dd></div>
     </dl>
+    <dl class="control-list touch-help">
+      <div><dt>左手摇杆</dt><dd>推动走位，松手停下</dd></div>
+      <div><dt>右手道具键</dt><dd>射击、投掷、饮用或放置</dd></div>
+      <div><dt>技能 / 冲刺</dt><dd>移动时也能点击使用</dd></div>
+      <div><dt>自动瞄准</dt><dd>朝最近的敌人瞄准，剑刃触敌自动攻击</dd></div>
+    </dl>
     <p class="help-note">走近武器即可拾取或换装。每次只能持一件，用完消失。空手时需要先拾剑才能近战。</p>
     <button id="helpDoneBtn" class="primary-button">关闭</button>
   </dialog>
-  <script src="ice-map.js"></script><script src="third-map.js"></script><script src="ice-art.js"></script><script src="engine.js"></script><script src="renderer.js"></script><script src="audio-assets.js"></script><script src="audio.js"></script><script src="main.js"></script>
+  <script src="ice-map.js"></script><script src="third-map.js"></script><script src="ice-art.js"></script><script src="engine.js"></script><script src="renderer.js"></script><script src="audio-assets.js"></script><script src="audio.js"></script><script src="main.js?v=touch-1"></script>
 </body>
 </html>

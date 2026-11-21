@@ -17,7 +17,7 @@ h1, h2, p { margin: 0; }
 h2 { font-size: 15px; font-weight: 650; }
 .app-shell { width: min(100% - 32px, 1220px); margin: auto; padding-bottom: 12px; }
 .site-header { display: flex; align-items: center; justify-content: space-between; height: 68px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
-.brand, .tools, .section-heading, .character-card, .roster-row, .item-row, .match-time, .ability-slots, .touch-controls { display: flex; align-items: center; }
+.brand, .tools, .section-heading, .character-card, .roster-row, .item-row, .match-time, .ability-slots { display: flex; align-items: center; }
 .brand { gap: 12px; }
 .brand h1 { font-size: 22px; letter-spacing: 2px; }
 .brand-mark { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; width: 30px; height: 30px; }
@@ -75,6 +75,7 @@ select { background: #141f17; border: 1px solid var(--line); border-radius: 3px;
 .roster-row.dead { opacity: .55; }
 .roster-row.dead .roster-hp { color: var(--muted); }
 .arena-column { min-width: 0; }
+.arena-stage { display: contents; }
 .arena-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; background: #263425; border: 1px solid #495b3b; border-radius: 4px 4px 0 0; height: 35px; }
 .arena-toolbar strong { font-size: 12px; }
 .live-dot { display: inline-block; background: var(--green); width: 6px; height: 6px; margin-right: 6px; }
@@ -116,7 +117,7 @@ select { background: #141f17; border: 1px solid var(--line); border-radius: 3px;
 kbd { font: 10px/1.4 Consolas, "Microsoft YaHei", monospace; padding: 0 3px; border: 1px solid #687a5759; border-radius: 2px; color: #bacaaa; white-space: nowrap; }
 .below-arena { display: flex; justify-content: space-between; align-items: center; padding: 6px 1px; font-size: 10px; }
 .below-arena button { color: var(--muted); background: transparent; border: 0; font-size: 10px; padding: 0; }
-.touch-controls { display: none; }
+#joystick, .touch-help { display: none; }
 .item-row { gap: 10px; margin-top: 12px; }
 .item-row canvas { width: 38px; height: 38px; padding: 3px; background: #141f17; border: 1px solid #394a32; border-radius: 2px; }
 .item-row strong, .item-row span { display: block; }
@@ -176,6 +177,148 @@ dialog p { font-size: 12px; }
   .arena-column { max-width: min(100%, max(250px, calc((100dvh - 225px) * .75))); align-self: center; }
   .player-dock { padding: 5px; }
   .ability { padding: 3px 4px; } .ability-slots { gap: 2px; }
-  .touch-controls { display: flex; justify-content: center; gap: 6px; }
-  .touch-controls button { width: 22%; min-height: 36px; background: #293d2a; border: 1px solid #506644; border-radius: 3px; touch-action: none; }
+}
+
+/* Thumb controls are tied to input mode, so resizing a desktop window keeps its mouse controls. */
+.touch-mode .keyboard-help, .touch-mode .below-arena, .touch-mode .skill-description kbd { display: none; }
+.touch-mode .touch-help { display: block; }
+.touch-mode:not(.touch-battle) .player-dock { display: none; }
+@media (max-width: 650px) {
+  .touch-mode .map-options button, .touch-mode .character-card, .touch-mode #startBtn, .touch-mode #difficulty { min-height: 44px; }
+  .touch-mode .character-card strong, .touch-mode .map-options strong { font-size: 12px; }
+  .touch-mode .map-picker h2, .touch-mode .left-column h2.lobby-only { display: block; margin-bottom: 5px; }
+}
+
+.touch-mode.touch-battle, .touch-mode.touch-battle body { overflow: hidden; overscroll-behavior: none; }
+.touch-battle .app-shell { width: 100%; padding: 0; }
+.touch-battle .site-header, .touch-battle .left-column, .touch-battle .right-column { display: none; }
+.touch-battle .game-layout { display: block; }
+.touch-battle .arena-column {
+  --stick-size: clamp(88px, 25vw, 112px);
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  height: 100vh;
+  height: 100dvh;
+  padding: max(3px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+  display: grid;
+  grid-template: "hud hud" 44px "field field" minmax(0, 1fr) "stick actions" calc(var(--stick-size) + 12px) / minmax(90px, 1fr) auto;
+  align-items: center;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.touch-battle .arena-toolbar {
+  grid-area: hud;
+  align-self: stretch;
+  padding: 0 4px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  height: auto;
+}
+.touch-battle .arena-toolbar > strong, .touch-battle .player-vitals .caption, .touch-battle .ability kbd { display: none; }
+.touch-battle .match-time { margin-left: auto; gap: 6px; }
+.touch-battle #pauseBtn { min-width: 44px; min-height: 44px; font-size: 17px; }
+.touch-battle .arena-stage {
+  grid-area: field;
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  container-type: size;
+}
+.touch-battle .arena-wrap {
+  width: min(100%, calc((100vh - var(--stick-size) - 70px) * .75));
+  width: min(100cqw, 75cqh);
+}
+.touch-battle .game-overlay { max-height: 100%; overflow: auto; overscroll-behavior: contain; padding: 14px; }
+.touch-battle .game-overlay button { min-height: 42px; }
+.touch-battle .player-dock { display: contents; }
+.touch-battle .player-vitals {
+  grid-area: hud;
+  z-index: 1;
+  justify-self: start;
+  max-width: min(58%, calc(100% - 135px));
+  padding-left: 8px;
+  line-height: 1.1;
+  pointer-events: none;
+}
+.touch-battle .player-vitals > div { white-space: nowrap; }
+.touch-battle #buffStatus { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.touch-battle #joystick {
+  grid-area: stick;
+  justify-self: start;
+  margin-left: clamp(4px, 2vw, 24px);
+  display: block;
+  position: relative;
+  width: var(--stick-size);
+  height: var(--stick-size);
+  border: 2px solid #71826a;
+  border-radius: 50%;
+  background:
+    linear-gradient(#788a6b, #788a6b) center 7% / 2px 7px,
+    linear-gradient(#788a6b, #788a6b) center 93% / 2px 7px,
+    linear-gradient(#788a6b, #788a6b) 7% center / 7px 2px,
+    linear-gradient(#788a6b, #788a6b) 93% center / 7px 2px,
+    radial-gradient(circle, #384b37, #223025 72%);
+  background-repeat: no-repeat;
+  box-shadow: inset 0 0 0 3px #18271c;
+  touch-action: none;
+}
+#joystickThumb {
+  display: block;
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 42%; height: 42%;
+  transform: translate(-50%, -50%) translate(var(--stick-x, 0px), var(--stick-y, 0px));
+  border-radius: 50%;
+  background: #a8bf98;
+  border: 2px solid #ccddbc;
+  box-shadow: 0 3px 0 #435d40, 0 4px 7px #152217;
+  pointer-events: none;
+}
+.touch-battle .ability-slots {
+  grid-area: actions;
+  justify-self: end;
+  margin: 0 clamp(2px, 1vw, 18px) 0 0;
+  display: grid;
+  grid-template: "skill item" minmax(44px, auto) "dash item" minmax(44px, auto) / clamp(62px, 17vw, 84px) clamp(74px, 22vw, 96px);
+  gap: 5px;
+  align-items: stretch;
+}
+.touch-battle .ability {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 0;
+  padding: 2px;
+  border: 1px solid #60725b;
+  border-radius: 12px;
+  background: #2a3c2e;
+  text-align: center;
+  line-height: 1.2;
+}
+.touch-battle .ability b { font-size: 13px; font-weight: 650; }
+.touch-battle .ability small { font-size: 10px; }
+.touch-battle #skillBtn { grid-area: skill; }
+.touch-battle #dashBtn { grid-area: dash; }
+.touch-battle #attackBtn { grid-area: item; border-color: var(--green); border-radius: 20px; background: #354c35; }
+.touch-battle #attackBtn canvas { width: 30px; height: 30px; }
+.touch-battle #attackBtn:disabled { border-color: #566450; opacity: .75; }
+.touch-battle .ability:not(:disabled):active { background: #466044; border-color: var(--green); }
+
+@media (orientation: landscape) {
+  .touch-battle .arena-column {
+    --stick-size: clamp(84px, 17vh, 114px);
+    grid-template: "hud hud hud" 44px "stick field actions" minmax(0, 1fr) / minmax(94px, 1fr) minmax(0, 3fr) minmax(122px, 1fr);
+  }
+  .touch-battle .arena-wrap { width: min(100%, calc((100vh - 62px) * .75)); width: min(100cqw, 75cqh); }
+  .touch-battle #joystick, .touch-battle .ability-slots { align-self: end; margin: 0 2px 6px; }
+  .touch-battle .ability-slots { grid-template-columns: minmax(54px, 1fr) minmax(60px, 1fr); width: min(100%, 170px); }
+  .touch-battle .ability b { font-size: 12px; }
 }
