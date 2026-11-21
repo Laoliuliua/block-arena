@@ -1,0 +1,52 @@
+Game content is an independent fan-style implementation; it is not a Minecraft
+mod and is not affiliated with Mojang or Microsoft.
+
+Minecraft Java Edition 1.20.4 item textures
+
+The snowball, stone sword, sweet berries, leather boots, baked potato, loaded
+crossbows, firework rocket and arrow use item sprites from Minecraft Java
+Edition 1.20.4 (Mojang Studios / Microsoft). The game stores lossless indexed
+pixels in ice-art.js for offline rendering. Leather boots combine the
+base layer with the default leather dye colour #A06540 and the overlay.
+
+Source mirror: https://github.com/InventivetalentDev/minecraft-assets/tree/1.20.4/assets/minecraft/textures/item
+PNG files and Git blob IDs:
+snowball.png  5de43bfc2b8845fcde125c5543aa4a11a3c7add6
+stone_sword.png  d56477b9015a6073c7d1c2fb63876026894abb48
+sweet_berries.png  31e565b9398a5d61aecc3d1de98a8f8fe66a154a
+leather_boots.png  0dad1ba09de520233d8fed438e79a9089ede8cd3
+leather_boots_overlay.png  37506525aba73bb19b226c1077e29337466659fa
+baked_potato.png  b1548535ffd2f33f92ad331987d18564e2b2c961
+crossbow_arrow.png  04dc52889f259abff41875bf9bf7a806466e7017
+crossbow_firework.png  7d5df078b92271d6098f4eea855be02582a5efeb
+firework_rocket.png  7f0dd0f0ceccff8e8142ac99e33d3a96b7139dc2
+arrow.png  4f748a002f863bc423486817b6cd5f85c5dc5f5d
+
+Ravine items use the same Java Edition 1.20.4 source (Mojang Studios / Microsoft):
+enchanted_book.png  48e6a7f42052beeed41fe085552f59e6f89f5390
+potion.png  b86b4b7f27ee23ac212890441e7c67631489446f
+potion_overlay.png  852260d71a6c2f400d49c0fff0e35172df6328f8
+The two splash potion icons use the Java 1.20.4 splash_potion.png bottle
+(Git blob 0d3fa39de70e5b19b29d0618c4eec5f11f36e736) and potion_overlay.png.
+The poison and harming liquid colours follow the supplied reference chart.
+The two ribbon colours distinguish Sharpness and Power as in the reference clip.
+The TNT front face is sampled from the supplied reference image; the ravine
+tile art and layout are based on the supplied video.
+
+Sound effects: Minecraft Java Edition 1.20.4, Mojang Studios / Microsoft.
+The local Ogg Vorbis files in assets/audio were retrieved unchanged from
+the official Minecraft resource CDN, https://resources.download.minecraft.net/.
+See assets/audio/sources.json for the Mojang version manifest, asset index,
+event definitions, original asset keys, and individual SHA-1 hashes.
+
+The Vindicator portrait, Totem of Undying and fire charge sprites are sampled
+from the three player-supplied reference images. The iron axe uses the Java
+1.20.4 item texture iron_axe.png from the same texture mirror above (Git blob
+43e742c28f79eff61144a25b07d9207da6f17d83). Vindicator hurt, totem activation,
+and blaze shooting are their corresponding Minecraft events. The summoned axe
+uses iron equipment and melee hit sounds; ignition uses the flint and steel sound.
+
+The Witch portrait and the red drinking potion follow the player-supplied
+Witch and potion reference images. The Witch's hurt, drink and throw recordings
+are Minecraft Java 1.20.4 Witch events. Brewing uses the vanilla bottle-fill
+sound. Source paths and checksums are included in assets/audio/sources.json.

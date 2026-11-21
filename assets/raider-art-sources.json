@@ -1,0 +1,10 @@
+{
+  "vindicator-reference.png": "Front face and nose cropped from the user-supplied Vindicator screenshot.",
+  "totem-reference.png": "Pixel cells sampled from the user's Totem of Undying reference; connected white background removed.",
+  "fire-charge-reference.png": "Pixel cells sampled from the user's fire charge reference; connected white background removed.",
+  "iron-axe.png": {
+    "credit": "Minecraft Java Edition 1.20.4, Mojang Studios / Microsoft",
+    "source": "https://github.com/InventivetalentDev/minecraft-assets/blob/1.20.4/assets/minecraft/textures/item/iron_axe.png",
+    "gitBlobSha1": "43e742c28f79eff61144a25b07d9207da6f17d83"
+  }
+}

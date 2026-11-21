@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#101915">
+  <title>方块竞技场</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="site-header">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><h1>方块竞技场</h1></div>
+      <div class="tools"><button id="soundBtn" aria-label="关闭音效" aria-pressed="true">♫ <span>音效开</span></button><button id="helpBtn" aria-label="查看操作说明">操作说明</button></div>
+    </header>
+    <main class="game-layout">
+      <aside class="left-column">
+        <section class="panel">
+          <div class="map-picker">
+            <h2>选择地图</h2>
+            <div class="map-options" role="group" aria-label="选择地图">
+              <button type="button" data-map="forest" aria-pressed="true"><canvas width="160" height="48" aria-hidden="true"></canvas><strong>林间水池</strong></button>
+              <button type="button" data-map="ice" aria-pressed="false"><canvas width="160" height="48" aria-hidden="true"></canvas><strong>冰脊雪原</strong></button>
+              <button type="button" data-map="third" aria-pressed="false"><canvas width="160" height="48" aria-hidden="true"></canvas><strong>藤蔓山坳</strong></button>
+            </div>
+          </div>
+          <h2 class="lobby-only">选择角色</h2><h2 class="match-only">出战角色</h2>
+          <div id="characterList" class="character-list" role="group" aria-label="选择角色"></div>
+          <div class="skill-description"><div><kbd>Q</kbd><strong id="skillName"></strong></div><p id="skillDesc"></p></div>
+          <label class="difficulty-label" for="difficulty">对手难度</label>
+          <select id="difficulty"><option value="easy">简单</option><option value="normal" selected>普通</option><option value="hard">困难</option></select>
+          <button id="startBtn" class="primary-button">开始对战 <span aria-hidden="true">▶</span></button>
+        </section>
+        <section class="panel roster-panel"><div class="section-heading"><h2>存活角色</h2><span id="aliveCount" class="pill">5 / 5</span></div><div id="roster"></div></section>
+      </aside>
+      <section class="arena-column" aria-label="对战区域">
+        <div class="arena-toolbar">
+          <strong><i class="live-dot"></i><span id="mapTitle">林间水池</span></strong>
+          <div class="match-time"><span id="phaseLabel">待开局</span><time id="timer">00:00</time><button id="pauseBtn" aria-label="暂停游戏" title="暂停 / 继续（Esc）">Ⅱ</button></div>
+        </div>
+        <div class="arena-wrap" id="arenaWrap">
+          <canvas id="arena" width="720" height="960" tabindex="0" aria-label="对战场地"></canvas>
+          <div class="arena-top-hud"><span id="matchBadge">第 1 局</span><span id="slowStatus" hidden></span><span id="dropTimer" hidden></span></div>
+          <div id="countdown" class="countdown" hidden></div>
+          <div id="pauseOverlay" class="game-overlay" hidden>
+            <h2>已暂停</h2><button id="resumeBtn" class="primary-button">继续对战</button><button id="pauseRestartBtn" class="secondary-button">重新开始</button><button id="pauseChooseBtn" class="text-button">返回选图 / 选角</button>
+          </div>
+          <div id="resultOverlay" class="game-overlay" hidden>
+            <h2 id="resultTitle">本局结束</h2><p id="resultDescription"></p>
+            <div class="result-stats"><div><strong id="resultKills">0</strong><span>淘汰</span></div><div><strong id="resultTime">00:00</strong><span>存活时间</span></div></div>
+            <button id="againBtn" class="primary-button">再来一局</button><button id="chooseBtn" class="secondary-button">返回选图 / 选角</button><button id="spectateBtn" class="text-button">继续观战</button>
+          </div>
+        </div>
+        <div class="player-dock">
+          <div class="player-vitals"><span class="caption">生命</span><div><span id="playerHealth" class="hearts">♥ ♥ ♥</span><span id="playerShield" class="shield-count"></span><img id="playerTotem" src="assets/totem-reference.png" alt="已携带不死图腾" title="已携带不死图腾" width="17" height="17" hidden></div><small id="buffStatus" hidden></small></div>
+          <div class="ability-slots">
+            <button id="attackBtn" class="ability weapon-slot" disabled><canvas id="heldIcon" width="30" height="30" aria-hidden="true"></canvas><span><b id="attackState">空手</b><small id="weaponAction">拾剑可近战</small></span><kbd id="weaponKey" hidden>J</kbd></button>
+            <button id="skillBtn" class="ability"><b id="skillAction">技能</b><kbd>Q</kbd><small id="skillState">就绪</small></button>
+            <button id="dashBtn" class="ability" title="冲刺（空格）"><b>冲刺</b><kbd>␣</kbd><small id="dashState">就绪</small></button>
+          </div>
+        </div>
+        <div class="below-arena"><button id="aimBtn"><i class="live-dot"></i><span id="aimLabel">自动瞄准</span> <kbd>E</kbd></button><span><kbd>WASD</kbd> 移动</span></div>
+        <div class="touch-controls" aria-label="触屏方向键"><button data-direction="left" aria-label="向左">←</button><button data-direction="up" aria-label="向上">↑</button><button data-direction="down" aria-label="向下">↓</button><button data-direction="right" aria-label="向右">→</button></div>
+      </section>
+      <aside class="right-column">
+        <section class="panel items-panel"><h2>场地道具</h2><div id="itemList"></div></section>
+        <section class="panel activity-panel"><h2>对战记录</h2><div id="eventLog" class="event-log" aria-live="polite"></div></section>
+      </aside>
+    </main>
+  </div>
+  <dialog id="helpDialog">
+    <button id="closeHelpBtn" class="dialog-close" aria-label="关闭">×</button><h2>操作说明</h2>
+    <p id="matchRules"></p>
+    <dl class="control-list">
+      <div><dt><kbd>WASD</kbd> / <kbd>↑↓←→</kbd></dt><dd>移动</dd></div>
+      <div><dt>持剑移动或转向</dt><dd>剑刃触敌，自动攻击一次</dd></div>
+      <div><dt>鼠标左 / 右键 · <kbd>J</kbd> / <kbd>K</kbd></dt><dd>射击、投掷、饮用治疗药水或放置 TNT</dd></div>
+      <div><dt><kbd>Q</kbd> / <kbd>空格</kbd></dt><dd>角色技能 / 冲刺</dd></div>
+      <div><dt><kbd>E</kbd></dt><dd>切换自动瞄准和鼠标瞄准</dd></div>
+      <div><dt><kbd>Esc</kbd> / <kbd>R</kbd></dt><dd>暂停 / 重开</dd></div>
+    </dl>
+    <p class="help-note">走近武器即可拾取或换装。每次只能持一件，用完消失。空手时需要先拾剑才能近战。</p>
+    <button id="helpDoneBtn" class="primary-button">关闭</button>
+  </dialog>
+  <script src="ice-map.js"></script><script src="third-map.js"></script><script src="ice-art.js"></script><script src="engine.js"></script><script src="renderer.js"></script><script src="audio-assets.js"></script><script src="audio.js"></script><script src="main.js"></script>
+</body>
+</html>
