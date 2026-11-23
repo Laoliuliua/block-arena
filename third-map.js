@@ -56,11 +56,11 @@
     }
     return true;
   }
-  function moveActor(a,dx,dy) {
+  function moveActor(a,dx,dy,r=R) {
     const n=Math.max(1,Math.ceil(Math.max(Math.abs(dx),Math.abs(dy))/6));
     for (let i=0;i<n;i++) {
-      if (dx && canStand(a.x+dx/n,a.y)) a.x+=dx/n;
-      if (dy && canStand(a.x,a.y+dy/n)) a.y+=dy/n;
+      if (dx && canStand(a.x+dx/n,a.y,r)) a.x+=dx/n;
+      if (dy && canStand(a.x,a.y+dy/n,r)) a.y+=dy/n;
     }
   }
   const step=CELL/2, stride=41, nodes=[], open=[], routes=new Map();
@@ -94,10 +94,10 @@
     const n=nearest(x,y,r);
     return n ? {x:n.x,y:n.y} : {x:465,y:139};
   }
-  function nextWaypoint(from,target) {
-    const to=canStand(target.x,target.y) ? target : safePosition(target.x,target.y);
-    if (segmentClear(from.x,from.y,to.x,to.y,R)) return to;
-    const end=nearest(to.x,to.y,R,true),start=nearest(from.x,from.y,R,true);
+  function nextWaypoint(from,target,r=R) {
+    const to=canStand(target.x,target.y,r) ? target : safePosition(target.x,target.y,r);
+    if (segmentClear(from.x,from.y,to.x,to.y,r)) return to;
+    const end=nearest(to.x,to.y,r,true),start=nearest(from.x,from.y,r,true);
     if (!end || !start) return from;
     let links=routes.get(end.id);
     if (!links) {
@@ -112,7 +112,7 @@
     let n=start;
     for(let k=0;k<14 && n!==end;k++) {
       const b=nodes[links[n.id]];
-      if (!b || !segmentClear(from.x,from.y,b.x,b.y,R)) break;
+      if (!b || !segmentClear(from.x,from.y,b.x,b.y,r)) break;
       n=b;
     }
     return n;

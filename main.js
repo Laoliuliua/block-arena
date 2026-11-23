@@ -21,6 +21,7 @@
     }
   };
   const itemEffects = {
+    ironSpear: '基础 1 伤害。每持有 5 秒 +0.5，最多 +1；冲刺后 1 秒内再 +0.5',
     sword: '剑刃触敌 · 1 点伤害', bow: '单发 · 1 点伤害',
     apple: '回复 1 生命并获得护盾', helmet: '抵挡一次伤害',
     enchanted: '回复 3 生命并获得 2 护盾', snowball: '0.25 伤害并击退',
@@ -45,6 +46,7 @@
   let touchMode = matchMedia('(pointer: coarse)').matches ||
     (navigator.maxTouchPoints > 0 && !matchMedia('(any-pointer: fine)').matches);
   let displayedWeapon;
+  let rosterActors = [], knownActorCount = 0;
   let selected = 'random', selectedMap = 'forest', game, paused = false, autoAim = true, spectating = false;
   let round = 1, savedResult = false, lastFrame = 0, uiClock = 0, eventId = 0, lastSound = 0;
   let aimX = 360, aimY = 350;
@@ -70,7 +72,8 @@
     choices.forEach(([type, info]) => {
       const button = document.createElement('button'); button.className = 'character-card';
       button.dataset.character = type; button.setAttribute('aria-pressed', String(type === selected));
-      button.setAttribute('aria-label', type === 'random' ? '随机选择出战角色' : `选择${info.name}，技能：${info.skillName}`);
+      button.setAttribute('aria-label', type === 'random' ? '随机选择出战角色' :
+        `选择${info.name}，${type === 'slime' ? '被动' : '技能'}：${info.skillName}`);
       let icon;
       if (type === 'random') {
         icon = document.createElement('span'); icon.className = 'random-icon'; icon.textContent = '⚄';
@@ -87,7 +90,10 @@
   }
   function buildRoster() {
     $('roster').replaceChildren();
-    game.actors.forEach(actor => {
+    knownActorCount = game.actors.length;
+    const splitParents = new Set(game.actors.filter(a => a.isMiniSlime).map(a => a.slimeParentId));
+    rosterActors = game.actors.filter(a => !splitParents.has(a.id));
+    rosterActors.forEach(actor => {
       const row = document.createElement('div'); row.className = 'roster-row'; row.dataset.actor = actor.id;
       const icon = document.createElement('canvas'); icon.width = 28; icon.height = 28; ArenaRenderer.drawAvatar(icon, actor.type, 28);
       const name = document.createElement('span'); name.className = 'roster-name'; name.textContent = actor.name;
@@ -109,6 +115,7 @@
       text.append(title, effect); row.append(icon, text); list.append(row);
     }
     map.items.forEach(addItem);
+    addItem('ironSpear');
     addItem('poisonSplash');
     addItem('harmingSplash');
     addItem('totem');
@@ -165,7 +172,7 @@
     document.body.dataset.arena = game.map;
     document.title = '方块竞技场 · ' + map.name;
     $('mapTitle').textContent = map.name;
-    $('matchRules').textContent = '与 ' + (game.actors.length - 1) + ' 名电脑角色对战，最后存活者获胜。' +
+    $('matchRules').textContent = '与 ' + (game.actors.length - 1) + ' 名电脑角色对战，最后存活的阵营获胜。' +
       (game.map === 'ice' ? ' 冰面会打滑，深蓝色冰脊可作掩体。' : game.map === 'third' ? ' 从西、南洞口进入山体；附魔书拾取即生效。' : '');
     mapButtons.forEach(button => {
       button.setAttribute('aria-pressed', String(button.dataset.map === selectedMap));
@@ -175,10 +182,13 @@
     aimX = game.player.x; aimY = game.player.y - 200;
     $('startBtn').hidden = startImmediately; $('resultOverlay').hidden = true; $('pauseOverlay').hidden = true;
     document.body.classList.toggle('in-match', startImmediately);
+    document.querySelector('[data-character="slime"] strong').textContent = CHARACTERS.slime.name;
     $('skillName').textContent = (selected === 'random' ? fighter.name + ' · ' : '') + fighter.skillName;
     $('skillDesc').textContent = fighter.skillDescription;
     $('skillAction').textContent = fighter.skillName;
-    $('skillBtn').title = `Q · ${fighter.skillName}`;
+    $('skillBtn').title = game.character === 'slime' ? fighter.skillDescription : `Q · ${fighter.skillName}`;
+    $('skillBtn').querySelector('kbd').hidden = game.character === 'slime';
+    document.querySelector('.skill-description kbd').hidden = game.character === 'slime';
     document.querySelectorAll('.character-card').forEach(b => {
       b.setAttribute('aria-pressed', String(b.dataset.character === selected)); b.disabled = !!startImmediately;
       b.classList.toggle('fielded', b.dataset.character === game.player.type);
@@ -204,11 +214,15 @@
     updateUI();
   }
   function finish() {
-    if (savedResult) return;
-    savedResult = true; const won = game.status === 'won';
-    $('resultTitle').textContent = won ? '胜利' : '已淘汰';
-    $('resultDescription').textContent = `${game.player.name} · 第 ${won ? 1 : game.player.rank || game.remaining + 1} 名`;
-    $('resultKills').textContent = game.player.kills;
+    const won = game.status === 'won', wasSpectating = spectating;
+    savedResult = true; spectating = false;
+    const winner = game.winner;
+    $('resultTitle').textContent = winner?.type === 'slime' ? '史莱姆胜利' : won ? '胜利' :
+      game.finished && !winner ? '平局' : wasSpectating && winner ? winner.name + '胜利' : '已淘汰';
+    const familyWin = won && winner?.type === 'slime';
+    $('resultDescription').textContent = familyWin ? `史莱姆阵营存活 ${game.remaining} 只 · 第 1 名` :
+      `${game.player.name} · 第 ${won ? 1 : game.player.rank || game.remaining + 1} 名`;
+    $('resultKills').textContent = game.stats.kills;
     $('resultTime').textContent = timeText(game.player.deathTime ?? game.time);
     $('spectateBtn').hidden = won || game.finished;
     $('resultOverlay').hidden = false;
@@ -223,7 +237,7 @@
   function currentInput() {
     const down = (...codes) => codes.some(c => keys.has(c));
     if (touchMode || autoAim) {
-      const targets = game.actors.filter(a => a.alive && !a.isPlayer);
+      const targets = game.opponentsOf(game.player);
       targets.sort((a, b) => Math.hypot(a.x-game.player.x, a.y-game.player.y) - Math.hypot(b.x-game.player.x, b.y-game.player.y));
       if (targets[0]) { aimX = targets[0].x; aimY = targets[0].y; }
     }
@@ -240,9 +254,17 @@
   }
   function updateUI() {
     const p = game.player;
+    if (knownActorCount !== game.actors.length) {
+      buildRoster();
+      if (p.isMiniSlime) {
+        document.querySelector('[data-character="slime"] strong').textContent = p.name;
+        $('skillName').textContent = p.name;
+        $('skillDesc').textContent = '生命上限 1 点。同伴可被误伤，场上仅剩史莱姆即全队胜利。';
+      }
+    }
     $('timer').textContent = timeText(game.time);
     $('phaseLabel').textContent = paused ? '已暂停' : game.finished ? '对战结束' : spectating ? '观战中' : game.countdown > 0 ? '准备开始' : game.started ? '对战进行中' : '等待入场';
-    $('aliveCount').textContent = `${game.remaining} / ${game.actors.length}`;
+    $('aliveCount').textContent = `${game.remaining} / ${rosterActors.length}`;
     $('dropTimer').hidden = !game.started;
     $('dropTimer').textContent = game.time > 90 ? '边界收缩' : `空投 ${Math.max(0, Math.ceil(game.nextAirDrop - game.time))}s`;
     $('playerHealth').textContent = game.map !== 'forest' || !Number.isInteger(p.hp) ? `♥ ${p.hp} / ${p.maxHp}` :
@@ -251,7 +273,8 @@
     $('playerTotem').hidden = !p.hasTotem;
     const poisoned = p.alive && p.poisonUntil > game.time;
     $('playerHealth').classList.toggle('poisoned', poisoned);
-    const buffs = [p.meleeBonus ? '锋利 +' + p.meleeBonus : '', p.rangedBonus ? '力量 +' + p.rangedBonus : '',
+    const spearBonus = game.spearHoldBonus(p);
+    const buffs = [spearBonus ? '长矛 +' + spearBonus : '', p.meleeBonus ? '锋利 +' + p.meleeBonus : '', p.rangedBonus ? '力量 +' + p.rangedBonus : '',
       p.regenTicks ? '恢复 ' + p.regenTicks + 's' : '', p.burnUntil > game.time ? '燃烧中' : '',
       poisoned ? '中毒 ' + Math.ceil(p.poisonUntil - game.time) + 's' : ''].filter(Boolean).join(' · ');
     $('buffStatus').hidden = !buffs; $('buffStatus').textContent = buffs;
@@ -266,9 +289,9 @@
       const label = ITEM_NAMES[p.weapon] || '空手';
       $('attackState').textContent = p.weapon==='poisonSplash' ? '剧毒药水' : p.weapon==='harmingSplash' ? '伤害药水' : label;
       const thrown = isSplashPotion(p.weapon) || p.weapon==='snowball';
-      const instruction = p.weapon === 'ironAxe' ? '斧刃触敌' : p.weapon === 'tnt' ? '放在脚下' :
+      const instruction = p.weapon === 'ironSpear' ? '矛尖触敌' : p.weapon === 'ironAxe' ? '斧刃触敌' : p.weapon === 'tnt' ? '放在脚下' :
         p.weapon === 'healingPotion' ? '饮用 +1' : thrown ? '投掷 · 1 次' :
-        usable ? '射击 · 1 发' : isBlade(p.weapon) ? '剑刃触敌' : '拾剑可近战';
+        usable ? '射击 · 1 发' : isBlade(p.weapon) ? '剑刃触敌' : '拾剑或矛可近战';
       $('weaponAction').textContent = instruction;
       $('weaponKey').hidden = !usable;
       $('attackBtn').title = usable ? instruction + '（左键、右键、J 或 K）' : instruction;
@@ -279,18 +302,23 @@
       if (p.weapon !== 'fist') ArenaRenderer.drawItem($('heldIcon'), p.weapon, 30);
     }
     const needsSword = p.type === 'zombie' && !isBlade(p.weapon);
-    $('skillState').textContent = p.drainReady ? `吸血 ${Math.ceil(p.drainRemaining)}s` :
+    const passive = p.type === 'slime';
+    if (passive) {
+      $('skillAction').textContent = p.isMiniSlime ? '小史莱姆' : CHARACTERS.slime.skillName;
+      $('skillBtn').title = p.isMiniSlime ? '小史莱姆没有主动技能' : CHARACTERS.slime.skillDescription;
+    }
+    $('skillState').textContent = passive ? (p.isMiniSlime ? '无主动技能' : '被动') : p.drainReady ? `吸血 ${Math.ceil(p.drainRemaining)}s` :
       needsSword ? (game.map === 'ice' ? '需石剑' : '需铁剑') : p.skillCooldown > .1 ? `${p.skillCooldown.toFixed(1)}s` : '就绪';
     $('dashState').textContent = p.dashCooldown > .1 ? `${p.dashCooldown.toFixed(1)}s` : '就绪';
     [['skillBtn', p.skillCooldown], ['dashBtn', p.dashCooldown]].forEach(([id, cd]) => { $(id).classList.toggle('ready', cd <= .1); $(id).classList.toggle('cooling', cd > .1); });
     const controlsLocked = !game.started || !p.alive || paused || game.finished || game.countdown > 0;
     $('attackBtn').disabled = controlsLocked || !usable;
-    $('skillBtn').disabled = controlsLocked || needsSword;
+    $('skillBtn').disabled = controlsLocked || needsSword || passive;
     $('dashBtn').disabled = controlsLocked;
     $('pauseBtn').disabled = !game.started || game.finished;
     $('pauseBtn').textContent = paused ? '▶' : 'Ⅱ';
     $('pauseBtn').setAttribute('aria-label', paused ? '继续游戏' : '暂停游戏');
-    game.actors.forEach(actor => {
+    rosterActors.forEach(actor => {
       const row = $('roster').querySelector(`[data-actor="${actor.id}"]`);
       row.classList.toggle('dead', !actor.alive);
       const health = game.map !== 'forest' || !Number.isInteger(actor.hp) ? `♥ ${actor.hp} / ${actor.maxHp}` : '♥'.repeat(actor.hp);
@@ -308,19 +336,17 @@
       });
     }
     $('arenaWrap').classList.toggle('hit', p.hitFlash > .05);
-    if (spectating && game.finished) {
-      $('resultTitle').textContent = game.winner ? `${game.winner.name}赢得胜利` : '这一局，没有幸存者';
-      $('resultDescription').textContent = `你的名次：第 ${game.player.rank} 名`;
-      $('spectateBtn').hidden = true; $('resultOverlay').hidden = false; spectating = false;
-    }
   }
   function frame(now) {
     const dt = lastFrame ? Math.min((now-lastFrame) / 1000, .2) : 0; lastFrame = now;
     if (!paused && (!savedResult || spectating)) game.update(dt, currentInput());
     playFrameSounds();
-    renderer.render(game, { aimX, aimY, showAim: game.started && game.player.alive && !paused, reducedMotion });
+    renderer.render(game, { aimX, aimY, showAim: game.started && game.player.alive && !paused && !game.finished, reducedMotion });
     if (game.countdown > 0 && !paused) { $('countdown').hidden = false; $('countdown').textContent = String(Math.ceil(game.countdown)); } else $('countdown').hidden = true;
-    if ((game.status === 'won' || game.status === 'lost') && !savedResult) finish();
+    if (game.status === 'spectating' && !spectating) {
+      spectating = true; clearInput(); updateUI();
+    }
+    if ((game.status === 'won' || game.status === 'lost') && (!savedResult || (spectating && game.finished))) finish();
     uiClock += dt; if (uiClock >= .1 || displayedWeapon !== game.player.weapon) { updateUI(); uiClock = 0; }
     requestAnimationFrame(frame);
   }
@@ -426,7 +452,8 @@
   window.blockArena = Object.freeze({ audioStatus: () => sound.status(), snapshot: () => ({
     map: game.map, status: game.status, paused, autoAim: touchMode || autoAim, time: game.time, remaining: game.remaining,
     character: game.player.type, selection: selected, round, countdown: game.countdown, player: { ...game.player },
-    actors: game.actors.map(({ type, hp, maxHp }) => ({ type, hp, maxHp })),
+    actors: game.actors.map(({ id, type, hp, maxHp, alive, isPlayer, isMiniSlime, slimeParentId }) =>
+      ({ id, type, hp, maxHp, alive, isPlayer, isMiniSlime, slimeParentId })),
     webs: game.webs.map(({ ownerId, x, y, radius }) => ({ ownerId, x, y, radius })),
     bombs: game.bombs.map(({ ownerId, x, y, fuse, radius }) => ({ ownerId, x, y, fuse, radius })),
     projectiles: game.projectiles.map(({ ownerId, type }) => ({ ownerId, type })),

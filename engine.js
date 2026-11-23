@@ -13,9 +13,10 @@
     stray: { name: '流浪者', color: '#a3d7ed', skillName: '迟缓之箭', skillDescription: '射出一箭，造成 1 点伤害，使目标移速减半 5 秒', skillCooldown: 8, icon: '➶' },
     spider: { name: '蜘蛛', color: '#e18989', skillName: '布置蛛网', skillDescription: '蛛网持续整局。网内移速降至原速的 20%，蜘蛛免疫', skillCooldown: 8, icon: '▦' },
     vindicator: { name: '卫道士', color: '#acb5af', skillName: '唤出铁斧', skillDescription: '铁斧触敌造成 2 点伤害后消失；未命中可持有 4 秒', skillCooldown: 12, icon: '⚒' },
-    witch: { name: '女巫', color: '#bd8dd4', skillName: '调配药水', skillDescription: '随机获得一瓶剧毒、瞬间伤害或治疗药水', skillCooldown: 8, icon: '⚗' }
+    witch: { name: '女巫', color: '#bd8dd4', skillName: '调配药水', skillDescription: '随机获得一瓶剧毒、瞬间伤害或治疗药水', skillCooldown: 8, icon: '⚗' },
+    slime: { name: '史莱姆', color: '#8ecf70', skillName: '分裂', skillDescription: '倒下后分裂成三只 1 血小史莱姆。同伴可被误伤，击败所有外敌即全队获胜。', skillCooldown: 0, icon: '▣' }
   });
-  const ITEM_NAMES = { sword: '铁剑', ironAxe: '铁斧', bow: '弓与箭', apple: '金苹果', helmet: '铁头盔', enchanted: '附魔金苹果',
+  const ITEM_NAMES = { sword: '铁剑', ironSpear: '铁长矛', ironAxe: '铁斧', bow: '弓与箭', apple: '金苹果', helmet: '铁头盔', enchanted: '附魔金苹果',
     poisonSplash: '喷溅型剧毒药水', harmingSplash: '喷溅型瞬间伤害药水', healingPotion: '治疗药水',
     sharpBook: '锋利附魔书', powerBook: '力量附魔书', tnt: 'TNT', regenPotion: '恢复药水 II', totem: '不死图腾',
     stoneSword: '石剑', snowball: '雪球', berries: '甜浆果', boots: '皮革靴子', potato: '烤土豆', crossbow: '弩', fireworkBow: '烟花弩' };
@@ -27,12 +28,13 @@
   const RANGED_SHOTS = new Map([['bow', 'arrow'], ['snowball', 'snowball'], ['crossbow', 'bolt'], ['fireworkBow', 'firework']]);
   const isRanged = type => RANGED_SHOTS.has(type);
   const isBlade = type => type === 'sword' || type === 'stoneSword';
+  const isGroundMelee = type => isBlade(type) || type === 'ironSpear';
   const POTION_FIRST_DROPS = { poisonSplash: 12, harmingSplash: 18 };
   const POTION_TYPES = Object.keys(POTION_FIRST_DROPS);
   const WITCH_POTIONS = [...POTION_TYPES, 'healingPotion'];
   const isSplashPotion = type => Object.hasOwn(POTION_FIRST_DROPS, type);
   const POTION_RANGE = 108, POTION_RADIUS = POTION_RANGE / 2, BOTTLE_RADIUS = 3;
-  const isWeapon = type => isBlade(type) || isRanged(type) || type === 'tnt' || isSplashPotion(type) || type === 'healingPotion';
+  const isWeapon = type => isGroundMelee(type) || isRanged(type) || type === 'tnt' || isSplashPotion(type) || type === 'healingPotion';
   const TNT_FUSE = 2, TNT_RADIUS = 140;
   const OPENING_SEARCH_RADIUS = 170;
   const arrowLike = type => type === 'arrow' || type === 'slowArrow' || type === 'bolt';
@@ -47,6 +49,7 @@
 
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const actorRadius = actor => actor.isMiniSlime ? 10 : WORLD.actorRadius;
   const angleDifference = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
   const inWater = (x, y) => (Math.abs(x - 360) < 64 && Math.abs(y - 480) < 100) || (Math.abs(x - 360) < 100 && Math.abs(y - 480) < 64);
 
@@ -72,20 +75,30 @@
   // In particular, neither the wooden handle nor the empty notch can inflict damage.
   const AXE_EDGE = [[1,9,11],[2,8,12],[3,7,12],[4,6,11],[5,6,12],
     [6,7,9],[6,10,14],[7,11,14],[8,11,13]];
-  function getAxeGeometry(actor) {
-    const facing = Number(actor.angle) || 0, angle = facing + Math.PI/4, size = 40;
-    const centerX = actor.x + 36*Math.cos(facing), centerY = actor.y + 36*Math.sin(facing);
+  // Iron pixels on the 16x16 spear sprite. The long wooden shaft is visible but harmless.
+  const SPEAR_EDGE = [[0,13,16],[1,11,16],[2,9,16],[3,7,15],[4,7,15],
+    [5,8,14],[6,9,14],[7,10,13],[8,11,13]];
+  const SPEAR_LENGTH = 66;
+  function getSpriteEdgeGeometry(actor, offset, size, edge, tipColumn, tipRow) {
+    const facing = Number(actor.angle) || 0, angle = facing + Math.PI/4;
+    const centerX = actor.x + offset*Math.cos(facing), centerY = actor.y + offset*Math.sin(facing);
     const cos = Math.cos(angle)*size/16, sin = Math.sin(angle)*size/16;
     const point = (x,y) => ({x:centerX+(x-8)*cos-(y-8)*sin, y:centerY+(x-8)*sin+(y-8)*cos});
-    const bladeParts = AXE_EDGE.map(([y,l,r])=>[point(l,y),point(r,y),point(r,y+1),point(l,y+1)]);
-    const tip = point(11,1);
+    const bladeParts = edge.map(([y,l,r])=>[point(l,y),point(r,y),point(r,y+1),point(l,y+1)]);
+    const tip = point(tipColumn,tipRow);
     return {centerX,centerY,angle,size,bladeParts,tipX:tip.x,tipY:tip.y};
+  }
+  const getAxeGeometry = actor => getSpriteEdgeGeometry(actor, 36, 40, AXE_EDGE, 11, 1);
+  function getSpearGeometry(actor) {
+    return { ...getSpriteEdgeGeometry(actor, 14 + SPEAR_LENGTH / 2, SPEAR_LENGTH / Math.SQRT2, SPEAR_EDGE, 16, 0),
+      totalLength: SPEAR_LENGTH };
   }
 
   function polygonIntersectsHead(blade, target) {
-    const head = [{ x: target.x - 16, y: target.y - 16 }, { x: target.x + 16, y: target.y - 16 },
-      { x: target.x + 16, y: target.y + 16 }, { x: target.x - 16, y: target.y + 16 }];
-    // Exact convex polygon / 32x32 axis-aligned head overlap, with no circular
+    const r = actorRadius(target);
+    const head = [{ x: target.x - r, y: target.y - r }, { x: target.x + r, y: target.y - r },
+      { x: target.x + r, y: target.y + r }, { x: target.x - r, y: target.y + r }];
+    // Exact convex polygon / axis-aligned head overlap, with no circular
     // proximity test, cone, padded blade radius, or invisible attack reach.
     const axes = [{ x: 1, y: 0 }, { x: 0, y: 1 }];
     for (let i = 0; i < blade.length; i++) {
@@ -100,7 +113,7 @@
     return true;
   }
   const swordIntersectsHead = (geometry,target) => polygonIntersectsHead(geometry.bladePoints,target);
-  const axeIntersectsHead = (geometry,target) => geometry.bladeParts.some(part=>polygonIntersectsHead(part,target));
+  const spriteEdgeIntersectsHead = (geometry,target) => geometry.bladeParts.some(part=>polygonIntersectsHead(part,target));
 
   class Game {
     constructor(options = {}) {
@@ -126,6 +139,7 @@
       this.safeInset = WORLD.border;
       this.nextDrop = this.map === 'third' ? 9 : 12;
       this.nextWeaponDrop = this.map === 'third' ? 6 : 4;
+      this.swordSupplySlots = 0;
       this.nextTntDrop = this.map === 'third' ? 10 : Infinity;
       this.nextTotemDrop = 45;
       this.potionDrops = { poisonSplash: 0, harmingSplash: 0 };
@@ -145,31 +159,14 @@
       this._announcedStorm = false;
       this.stats = { damageDealt: 0, damageTaken: 0, pickups: 0, shots: 0, skills: 0, kills: 0 };
       const spawns = this.terrain ? this.terrain.spawns : [{ x: 190, y: 730 }, { x: 150, y: 170 }, { x: 560, y: 170 }, { x: 560, y: 730 }, { x: 360, y: 285 }];
-      const maxHp = 3;
       const opponents = roster.filter(type => type !== this.character);
       spawns.forEach((spawn, index) => {
         const type = index === 0 ? this.character : opponents.splice(Math.floor(this.random() * opponents.length), 1)[0];
-        const info = CHARACTERS[type];
-        const weapon = type === 'skeleton' ? 'bow' : 'fist';
-        this.actors.push({
-          id: 'actor-' + index, type, name: info.name, color: info.color,
-          x: spawn.x, y: spawn.y, spawnX: spawn.x, spawnY: spawn.y,
-          hp: maxHp, maxHp, shield: 0, armor: 0, armorType: null,
-          alive: true, isPlayer: index === 0, angle: index === 0 ? -Math.PI / 2 : Math.PI / 2,
-          weapon, weaponUses: weapon === 'fist' ? 0 : 1,
-          ammo: weapon === 'bow' ? 1 : 0, weaponPickupContacts: [], axeRemaining: 0, axeExpiresAt: 0,
-          attackCooldown: index === 0 ? 0 : 1.5, shootCooldown: index === 0 ? 0 : 2.5, skillCooldown: index === 0 ? 0 : 3, dashCooldown: 0,
-          kills: 0, invulnerable: 0.5, hitFlash: 0, attackAnimation: 0, drainReady: false, drainRemaining: 0,
-          vx: 0, vy: 0, slideX: 0, slideY: 0, walkPhase: 0, moving: false, inWater: false,
-          slowRemaining: 0, inWeb: false, meleeBonus: 0, rangedBonus: 0, regenTicks: 0, regenNext: 0,
-          hasTotem: false, totemUsedAt: -1, burnUntil: 0, burnNext: 0, burnSource: null, blazeVolley: null,
-          poisonUntil: 0, poisonNext: 0, poisonSource: null,
-          aiTimer: 0.3 + this.random() * 0.7, aiGoal: null, aiTargetId: null, aiStrafe: this.random() < 0.5 ? -1 : 1,
-          stormTimer: 1.5, lastDamageBy: null, deathTime: null, rank: null
-        });
+        this.actors.push(this.createActor(type, spawn, index === 0));
       });
+      this.player = this.actors[0];
       const initialItems = [
-        ['sword', 116, 470], ['sword', 580, 460], ['bow', 210, 300],
+        ['ironSpear', 116, 470], ['sword', 580, 460], ['bow', 210, 300],
         ['bow', 525, 820], ['apple', 570, 315], ['apple', 330, 780],
         ['helmet', 122, 840], ['helmet', 410, 130], ['apple', 145, 610],
         ['apple', 270, 170], ['apple', 540, 610], ['apple', 270, 850],
@@ -179,11 +176,70 @@
       ];
       if (this.terrain) this.terrain.initialItems.forEach(({ type, x, y }) => this.spawnItem(type, x, y));
       else initialItems.forEach(([type, x, y]) => this.spawnItem(type, x, y));
+      if (this.terrain) this.spawnItem('ironSpear', spawns[0].x + 95, spawns[0].y + 36);
       this.addEvent('进入' + ({forest:'林间水池', ice:'冰脊雪原', third:'藤蔓山坳'})[this.map], 'info');
     }
 
-    get player() { return this.actors[0]; }
+    createActor(type, spawn, isPlayer, slimeParentId = null) {
+      const info = CHARACTERS[type];
+      const weapon = type === 'skeleton' ? 'bow' : 'fist';
+      const maxHp = slimeParentId ? 1 : 3;
+      return {
+        id: 'actor-' + this.actors.length, type, name: slimeParentId ? '小史莱姆' : info.name, color: info.color,
+        isMiniSlime: !!slimeParentId, slimeParentId,
+        x: spawn.x, y: spawn.y, spawnX: spawn.x, spawnY: spawn.y,
+        hp: maxHp, maxHp, shield: 0, armor: 0, armorType: null,
+        alive: true, isPlayer, angle: isPlayer ? -Math.PI / 2 : Math.PI / 2,
+        weapon, weaponUses: weapon === 'fist' ? 0 : 1,
+        ammo: weapon === 'bow' ? 1 : 0, weaponPickupContacts: [], axeRemaining: 0, axeExpiresAt: 0,
+        attackCooldown: isPlayer ? 0 : 1.5, shootCooldown: isPlayer ? 0 : 2.5, skillCooldown: isPlayer ? 0 : 3, dashCooldown: 0,
+        kills: 0, invulnerable: 0.5, hitFlash: 0, attackAnimation: 0, drainReady: false, drainRemaining: 0,
+        vx: 0, vy: 0, slideX: 0, slideY: 0, walkPhase: 0, moving: false, inWater: false,
+        slowRemaining: 0, inWeb: false, meleeBonus: 0, rangedBonus: 0, regenTicks: 0, regenNext: 0,
+        hasTotem: false, totemUsedAt: -1, burnUntil: 0, burnNext: 0, burnSource: null, blazeVolley: null,
+        poisonUntil: 0, poisonNext: 0, poisonSource: null,
+        aiTimer: 0.3 + this.random() * 0.7, aiGoal: null, aiTargetId: null, aiStrafe: this.random() < 0.5 ? -1 : 1,
+        stormTimer: 1.5, lastDamageBy: null, deathTime: null, rank: null
+      };
+    }
+
     get remaining() { return this.actors.filter(actor => actor.alive).length; }
+
+    opponentsOf(actor) {
+      return this.actors.filter(other => other.alive && other !== actor &&
+        !(actor.type === 'slime' && other.type === 'slime'));
+    }
+
+    spearHoldBonus(actor) {
+      if (actor.weapon !== 'ironSpear' || actor.spearEquippedAt == null) return 0;
+      const elapsed = Math.max(0, this.time - actor.spearEquippedAt);
+      return 0.5 * Math.min(2, Math.floor((elapsed + 1e-8) / 5));
+    }
+
+    splitSlime(parent) {
+      const children = [];
+      for (let i = 0; i < 3; i++) {
+        const child = this.createActor('slime', parent, i === 0 && parent.isPlayer, parent.id);
+        // Try nearby directions around the fallen parent. Moving through the normal
+        // terrain collision path keeps children on this side of a wall or map edge.
+        for (let attempt = 0; attempt < 12; attempt++) {
+          const angle = parent.angle + TAU * (i / 3 + attempt / 12);
+          child.x = parent.x; child.y = parent.y;
+          this.move(child, Math.cos(angle) * 27, Math.sin(angle) * 27);
+          if (children.every(sibling => distance(child, sibling) >= 20)) break;
+        }
+        child.spawnX = child.x; child.spawnY = child.y;
+        child.angle = parent.angle;
+        this.actors.push(child);
+        children.push(child);
+      }
+      if (parent === this.player) {
+        parent.isPlayer = false;
+        this.player = children[0];
+        this.player.kills = parent.kills;
+      }
+      this.addEvent('史莱姆分裂成了三只小史莱姆', 'split');
+    }
 
     random() {
       let x = this.randomState;
@@ -196,7 +252,7 @@
       if (this.started) return;
       this.started = true;
       this.countdown = 3;
-      this.addEvent('准备就绪 · 最后存活者获胜', 'info');
+      this.addEvent('准备就绪 · 最后存活的阵营获胜', 'info');
     }
 
     addEvent(text, type = 'info') {
@@ -240,18 +296,25 @@
     }
 
     spawnItem(type, x, y) {
-      if (type !== 'totem' && !WITCH_POTIONS.includes(type) && !this.loot.common.includes(type) && !this.loot.rare.includes(type)) return null;
+      if (type !== 'totem' && type !== 'ironSpear' && !WITCH_POTIONS.includes(type) && !this.loot.common.includes(type) && !this.loot.rare.includes(type)) return null;
       ({ x, y } = this.dropPosition(x, y));
       const item = { id: this._nextId++, type, x, y, bornAt: this.time, phase: this.random() * TAU };
       this.items.push(item);
       return item;
     }
 
+    spawnSupply(type) {
+      // One scheduled melee supply per slot: four swords, then one spear.
+      // Starting gear and dropped weapons go straight to spawnItem.
+      if (isBlade(type) && this.loot.common.includes(type) && ++this.swordSupplySlots % 5 === 0) type = 'ironSpear';
+      this.spawnItem(type);
+    }
+
     replenish(types, limit) {
       const counts = types.map(type=>this.items.filter(item=>item.type===type).length);
       if (counts.reduce((sum,n)=>sum+n,0) >= limit) return;
       const least = Math.min(...counts), choices = types.filter((_,i)=>counts[i]===least);
-      this.spawnItem(choices[Math.floor(this.random()*choices.length)]);
+      this.spawnSupply(choices[Math.floor(this.random()*choices.length)]);
     }
 
     update(dt, input = {}) {
@@ -298,12 +361,12 @@
       } else {
         if (this.time >= this.nextDrop) {
           const common = this.loot.common;
-          if (this.items.length < 22) this.spawnItem(common[Math.floor(this.random() * common.length)]);
+          if (this.items.length < 22) this.spawnSupply(common[Math.floor(this.random() * common.length)]);
           this.nextDrop += 12;
         }
         if (this.time >= this.nextWeaponDrop) {
           if (this.items.filter(item => isWeapon(item.type)).length < 10)
-            this.loot.supplies.forEach(type => this.spawnItem(type));
+            this.loot.supplies.forEach(type => this.spawnSupply(type));
           this.nextWeaponDrop += 4;
         }
       }
@@ -385,7 +448,7 @@
         } else if (length > 0.05 && !hasAim) desiredAngle = Math.atan2(my, mx);
         // Mouse jumps rotate the actual displayed sword over several frames;
         // collision never sweeps an unrendered instantaneous half-circle.
-        const maxTurn = isBlade(actor.weapon) || actor.weapon === 'ironAxe' ? Math.PI * 8 * dt : Infinity;
+        const maxTurn = isGroundMelee(actor.weapon) || actor.weapon === 'ironAxe' ? Math.PI * 8 * dt : Infinity;
         actor.angle += clamp(angleDifference(desiredAngle, actor.angle), -maxTurn, maxTurn);
         actor.inWater = this.terrain ? !!this.terrain.isWater?.(actor.x, actor.y) : inWater(actor.x, actor.y);
         const speed = 190 * (actor.isPlayer ? 1 : this.level.speed) * (actor.inWater ? 0.60 : 1);
@@ -435,10 +498,10 @@
 
     move(actor, dx, dy) {
       if (this.terrain) {
-        this.terrain.moveActor(actor, dx, dy);
+        this.terrain.moveActor(actor, dx, dy, actorRadius(actor));
         return;
       }
-      const margin = WORLD.border + WORLD.actorRadius;
+      const margin = WORLD.border + actorRadius(actor);
       actor.x = clamp(actor.x + dx, margin, WORLD.width - margin);
       actor.y = clamp(actor.y + dy, margin, WORLD.height - margin);
     }
@@ -449,9 +512,10 @@
         for (let j = i + 1; j < this.actors.length; j++) {
           const b = this.actors[j]; if (!b.alive) continue;
           const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
-          if (d < 32) {
+          const gap = actorRadius(a) + actorRadius(b);
+          if (d < gap) {
             const ux = d > 0.01 ? dx / d : 1, uy = d > 0.01 ? dy / d : 0;
-            const correction = (32 - d) * 0.5;
+            const correction = (gap - d) * 0.5;
             this.move(a, -ux * correction, -uy * correction);
             this.move(b, ux * correction, uy * correction);
           }
@@ -479,8 +543,12 @@
 
     aiControl(actor, dt) {
       actor.aiTimer -= dt;
-      const enemies = this.actors.filter(other => other.alive && other !== actor);
-      if (!enemies.length) return {};
+      const enemies = this.opponentsOf(actor);
+      if (!enemies.length) {
+        actor.aiTargetId = null;
+        actor.aiGoal = null;
+        return {};
+      }
       let target = enemies.find(other => other.id === actor.aiTargetId);
       const looting = this.time < 9;
       const holdingHeal = actor.weapon === 'healingPotion';
@@ -517,7 +585,7 @@
           if (item.type === 'regenPotion') value = actor.regenTicks ? 1 : 3;
           if (item.type === 'healingPotion') value = actor.hp < actor.maxHp ? 4 : 0.3;
           if (item.type === 'sharpBook' || item.type === 'powerBook') value = 2.6;
-          if (isBlade(item.type)) value = needsWeapon ? 3.8 : 0.35;
+          if (isGroundMelee(item.type)) value = needsWeapon ? 3.8 : 0.35;
           if (isRanged(item.type)) value = needsWeapon ? (actor.type === 'skeleton' ? 3 : 2.2) : 0.3;
           if (item.type === 'tnt' || isSplashPotion(item.type)) value = needsWeapon ? 3.2 : 0.3;
           if (isArmor(item.type)) value = actor.armor < 1 ? 1.8 : 0.1;
@@ -547,13 +615,13 @@
       const edge = this.safeInset + 30;
       const returning = this.time > 90 && (actor.x < edge || actor.x > 720 - edge || actor.y < edge || actor.y > 960 - edge);
       if (returning && this.terrain) goal = this.terrain.safePosition(360, 480);
-      const waypoint = this.terrain ? this.terrain.nextWaypoint(actor, goal) : goal;
+      const waypoint = this.terrain ? this.terrain.nextWaypoint(actor, goal, actorRadius(actor)) : goal;
       let dx = waypoint.x - actor.x, dy = waypoint.y - actor.y;
       const goalDistance = Math.hypot(dx, dy) || 1;
       dx /= goalDistance; dy /= goalDistance;
       if (goal === target && visibleTarget) {
         const wantsRanged = isRanged(actor.weapon) && actor.ammo > 0;
-        if (holdingPotion && d <= safeThrowDistance) { dx *= -1; dy *= -1; }
+        if ((holdingPotion && d <= safeThrowDistance) || (actor.weapon === 'ironSpear' && d < 56)) { dx *= -1; dy *= -1; }
         else if (wantsRanged && d < 180) { dx *= -0.75; dy *= -0.75; }
         else if (wantsRanged && d < 290) {
           const ox = dx; dx = -dy * actor.aiStrafe; dy = ox * actor.aiStrafe;
@@ -598,9 +666,10 @@
         attack: false,
         shoot: shouldDrink || (!looting && visibleTarget && ((holdingPotion && d > safeThrowDistance && d <= POTION_RANGE + POTION_RADIUS)
           || (actor.weapon === 'tnt' ? d < TNT_RADIUS * 0.7 : isRanged(actor.weapon) && d > 40 && d < 360 && actor.ammo > 0))),
-        skill: this.time >= 12 && actor.skillCooldown <= 0 && (actor.type === 'witch' ? shouldBrew :
+        skill: actor.type !== 'slime' && this.time >= 12 && actor.skillCooldown <= 0 && (actor.type === 'witch' ? shouldBrew :
           visibleTarget && d < skillRange && this.random() < dt * this.level.skillChance * 0.6),
-        dash: !looting && d < 80 && actor.hp === 1 && this.random() < dt * 0.4
+        dash: !looting && ((actor.weapon === 'ironSpear' && goal === target && visibleTarget && !danger && !returning && d > 96 && d < 180)
+          || (d < 80 && actor.hp === 1 && this.random() < dt * 0.4))
       };
     }
 
@@ -612,7 +681,11 @@
     updateSwordContacts(previousPoses = null) {
       for (const actor of this.actors) {
         const axe = actor.weapon === 'ironAxe';
-        if (!actor.alive || (!isBlade(actor.weapon) && !axe) || actor.weaponUses !== 1) continue;
+        const spear = actor.weapon === 'ironSpear';
+        if (!actor.alive || (!isGroundMelee(actor.weapon) && !axe) || actor.weaponUses !== 1) continue;
+        const geometryFor = spear ? getSpearGeometry : axe ? getAxeGeometry : getSwordGeometry;
+        const intersects = spear || axe ? spriteEdgeIntersectsHead : swordIntersectsHead;
+        const tipReach = spear ? 14 + SPEAR_LENGTH : 58;
         const old = previousPoses?.get(actor.id);
         const from = old && old.weapon === actor.weapon && !actor.swordDiscontinuous ? old : actor;
         const angleDelta = angleDifference(actor.angle, from.angle);
@@ -621,22 +694,23 @@
           if (!target.alive || target === actor || target.invulnerable > 0) continue;
           const oldTarget = previousPoses?.get(target.id);
           const targetFrom = oldTarget && !target.swordDiscontinuous ? oldTarget : target;
-          const reach = 81;
+          const headRadius = actorRadius(target);
+          const reach = tipReach + headRadius * Math.SQRT2;
           if (Math.max(from.x, actor.x) + reach < Math.min(targetFrom.x, target.x)
             || Math.min(from.x, actor.x) - reach > Math.max(targetFrom.x, target.x)
             || Math.max(from.y, actor.y) + reach < Math.min(targetFrom.y, target.y)
             || Math.min(from.y, actor.y) - reach > Math.max(targetFrom.y, target.y)) continue;
-          const travel = Math.hypot(actor.x - from.x, actor.y - from.y) + Math.abs(angleDelta) * 58
+          const travel = Math.hypot(actor.x - from.x, actor.y - from.y) + Math.abs(angleDelta) * tipReach
             + Math.hypot(target.x - targetFrom.x, target.y - targetFrom.y);
           const samples = Math.max(1, Math.ceil(travel / 1.25));
           for (let sample = 0; sample <= samples; sample++) {
             const t = sample / samples;
             const pose = { x: from.x + (actor.x - from.x) * t, y: from.y + (actor.y - from.y) * t, angle: from.angle + angleDelta * t };
-            const head = { x: targetFrom.x + (target.x - targetFrom.x) * t, y: targetFrom.y + (target.y - targetFrom.y) * t };
-            const geometry = axe ? getAxeGeometry(pose) : getSwordGeometry(pose);
-            if ((axe ? axeIntersectsHead(geometry, head) : swordIntersectsHead(geometry, head)) && this.clearLine(pose, head)) {
+            const head = { x: targetFrom.x + (target.x - targetFrom.x) * t, y: targetFrom.y + (target.y - targetFrom.y) * t, isMiniSlime: target.isMiniSlime };
+            const geometry = geometryFor(pose);
+            if (intersects(geometry, head) && this.clearLine(pose, head)) {
               candidates.push({ target, t, distance: distance(pose, head),
-                hitX: clamp(geometry.tipX, head.x - 16, head.x + 16), hitY: clamp(geometry.tipY, head.y - 16, head.y + 16) });
+                hitX: clamp(geometry.tipX, head.x - headRadius, head.x + headRadius), hitY: clamp(geometry.tipY, head.y - headRadius, head.y + headRadius) });
               break;
             }
           }
@@ -645,7 +719,9 @@
         const hit = candidates[0];
         if (!hit) continue;
         const oldHp = hit.target.hp, drain = actor.drainReady;
-        if (this.damage(hit.target, axe ? 2 : (actor.weapon === 'stoneSword' ? 0.75 : 1) + actor.meleeBonus, actor, { knockback: 230 })) {
+        const damage = spear ? 1 + this.spearHoldBonus(actor) + (this.time + 1e-8 < actor.spearBoostUntil ? 0.5 : 0)
+          : axe ? 2 : (actor.weapon === 'stoneSword' ? 0.75 : 1) + actor.meleeBonus;
+        if (this.damage(hit.target, damage, actor, { knockback: 230 })) {
           if (drain && hit.target.hp < oldHp) {
             actor.hp = Math.min(actor.maxHp, actor.hp + 1);
             this.effect('heal', actor.x, actor.y, { text: '+1', color: '#a2efa0', ttl: 0.8 });
@@ -690,6 +766,7 @@
 
     equipWeapon(actor, weapon) {
       actor.weapon = isWeapon(weapon) || weapon === 'ironAxe' ? weapon : 'fist';
+      actor.spearEquippedAt = actor.weapon === 'ironSpear' ? this.time : null;
       actor.axeRemaining = actor.weapon === 'ironAxe' ? 4 : 0;
       actor.axeExpiresAt = actor.axeRemaining ? this.time + actor.axeRemaining : 0;
       actor.weaponUses = actor.weapon === 'fist' ? 0 : 1;
@@ -744,6 +821,7 @@
       if (!actor.alive || actor.dashCooldown > 0) return false;
       const angle = Math.hypot(dx, dy) > 0.1 ? Math.atan2(dy, dx) : actor.angle;
       actor.dashCooldown = 3;
+      actor.spearBoostUntil = this.time + 1;
       actor.invulnerable = Math.max(actor.invulnerable, 0.24);
       const oldX = actor.x, oldY = actor.y;
       this.move(actor, Math.cos(angle) * 100, Math.sin(angle) * 100);
@@ -770,7 +848,7 @@
     }
 
     useSkill(actor) {
-      if (!actor.alive || actor.skillCooldown > 0) return false;
+      if (!actor.alive || actor.type === 'slime' || actor.skillCooldown > 0) return false;
       if (actor.type === 'zombie' && !isBlade(actor.weapon)) return false;
       actor.skillCooldown = CHARACTERS[actor.type].skillCooldown * (actor.isPlayer || actor.type === 'vindicator' || actor.type === 'witch' ? 1 : 1.5);
       if (actor.isPlayer) this.stats.skills++;
@@ -874,6 +952,7 @@
           if (target.weapon !== 'ironAxe') this.spawnItem(target.weapon, target.x, target.y);
           this.equipWeapon(target, 'fist');
         }
+        if (target.type === 'slime' && !target.isMiniSlime) this.splitSlime(target);
       }
       return true;
     }
@@ -958,9 +1037,9 @@
         travel = clear;
         shattered = true;
       }
-      const halfSize = WORLD.actorRadius + BOTTLE_RADIUS;
       for (const actor of this.actors) {
         if (!actor.alive) continue;
+        const halfSize = actorRadius(actor) + BOTTLE_RADIUS;
         const dx = actor.x - bottle.x, dy = actor.y - bottle.y;
         if (actor.id === bottle.ownerId && !bottle.leftThrower) {
           if (Math.abs(dx) <= halfSize && Math.abs(dy) <= halfSize) continue;
@@ -983,9 +1062,9 @@
       const source = this.actors.find(actor => actor.id === bottle.ownerId);
       this.effect('potionSplash', bottle.x, bottle.y, { potionType: bottle.type, radius: POTION_RADIUS, ttl: 0.32 });
       this.cue('potionBreak', bottle, source);
-      for (const actor of this.actors) {
-        if (!actor.alive) continue;
-        const r = WORLD.actorRadius;
+      // A splash hits actors present at shatter; newly split children are born afterward.
+      for (const actor of this.actors.filter(candidate => candidate.alive)) {
+        const r = actorRadius(actor);
         const closest = { x: clamp(bottle.x, actor.x - r, actor.x + r), y: clamp(bottle.y, actor.y - r, actor.y + r) };
         if (distance(bottle, closest) > POTION_RADIUS || !this.clearLine(bottle, closest)) continue;
         if (bottle.type === 'poisonSplash') {
@@ -1019,7 +1098,7 @@
           if (!actor.alive || actor.id === projectile.ownerId) continue;
           const dx = projectile.x - oldX, dy = projectile.y - oldY;
           const t = clamp(((actor.x - oldX) * dx + (actor.y - oldY) * dy) / (dx * dx + dy * dy || 1), 0, 1);
-          if (Math.hypot(actor.x - oldX - dx * t, actor.y - oldY - dy * t) < (projectile.type === 'fireball' ? 24 : 20) && this.clearLine(projectile, actor)) { victim = actor; break; }
+          if (Math.hypot(actor.x - oldX - dx * t, actor.y - oldY - dy * t) < actorRadius(actor) + (projectile.type === 'fireball' ? 8 : 4) && this.clearLine(projectile, actor)) { victim = actor; break; }
         }
         if (victim) {
           if (arrowLike(projectile.type)) this.cue('arrowHit', victim, source);
@@ -1052,23 +1131,32 @@
     }
 
     checkEnd() {
+      if (this.finished) return;
       const survivors = this.actors.filter(actor => actor.alive);
-      if (!this.player.alive && this.status !== 'lost') {
-        this.status = 'lost';
-        this.addEvent('你已被淘汰 · 可以观战或再来一局', 'lose');
-      }
-      if (survivors.length <= 1) {
+      const playerHasAllies = this.player.type === 'slime' && survivors.some(actor => actor.type === 'slime');
+      const slimeVictory = survivors.length > 0 && survivors.every(actor => actor.type === 'slime');
+      if (survivors.length <= 1 || slimeVictory) {
         this.finished = true;
-        this.winner = survivors[0] || null;
-        if (this.winner) this.winner.rank = 1;
-        this.status = this.player.alive ? 'won' : 'lost';
-        this.addEvent(this.winner ? this.winner.name + ' 获得了最终胜利！' : '竞技场平局', this.player.alive ? 'win' : 'info');
+        this.winner = this.player.alive ? this.player : survivors[0] || null;
+        for (const actor of survivors) actor.rank = 1;
+        const won = this.player.alive || (slimeVictory && playerHasAllies);
+        if (won) this.player.rank = 1;
+        this.status = won ? 'won' : 'lost';
+        const winnerName = this.winner?.type === 'slime' ? '史莱姆' : this.winner?.name;
+        this.addEvent(winnerName ? winnerName + ' 获得了最终胜利！' : '竞技场平局', won ? 'win' : 'info');
+      } else if (!this.player.alive) {
+        const status = playerHasAllies ? 'spectating' : 'lost';
+        if (this.status !== status) {
+          this.status = status;
+          this.addEvent(playerHasAllies ? '进入观战，其他小史莱姆仍在战斗' : '你已被淘汰 · 可以观战或再来一局', playerHasAllies ? 'info' : 'lose');
+        }
       }
     }
   }
 
   const api = { Game, CHARACTERS, WORLD, ITEM_NAMES, inWater, isBlade, isRanged, isSplashPotion, POTION_RANGE, POTION_RADIUS,
-    getSwordGeometry, swordIntersectsHead, getAxeGeometry, axeIntersectsHead };
+    getSwordGeometry, swordIntersectsHead, getAxeGeometry, axeIntersectsHead: spriteEdgeIntersectsHead,
+    getSpearGeometry, spearIntersectsHead: spriteEdgeIntersectsHead };
   root.ArenaEngine = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

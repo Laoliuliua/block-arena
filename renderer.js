@@ -12,6 +12,7 @@
     bow: 'assets/bow-reference.png',
     stray: 'assets/stray-reference.png',
     spider: 'assets/spider-reference.png',
+    slime: 'assets/slime-reference.png', ironSpear: 'assets/iron-spear.png',
     vindicator: 'assets/vindicator-reference.png', witch: 'assets/witch-reference.png',
     totem: 'assets/totem-reference.png',
     ironAxe: 'assets/iron-axe.png', fireball: 'assets/fire-charge-reference.png',
@@ -58,9 +59,14 @@
     zombie: ['#18291d', '#4e7047', '#799356', '#9aaa70', '#39513b', '#1c2c22', '#a2b67d'],
     skeleton: ['#2a3034', '#b7c0b6', '#d5ddd2', '#f0eee0', '#879184', '#414b49', '#ffffff'],
     enderman: ['#090c15', '#171721', '#24242e', '#30313c', '#15121d', '#0b0c12', '#b974ed'],
-    blaze: ['#3c2517', '#ba691f', '#e79b2b', '#f7c653', '#864516', '#4b2e19', '#ffe789']
+    blaze: ['#3c2517', '#ba691f', '#e79b2b', '#f7c653', '#864516', '#4b2e19', '#ffe789'],
+    slime: ['#65945b', '#5a8150', '#111311']
   };
   const FACE = {
+    slime: [
+      '00010000', '01111110', '02211220', '02211220',
+      '11111110', '01112111', '01111110', '00010000'
+    ],
     creeper: [
       '23223232', '32322323', '25522552', '25522552',
       '22255223', '22555522', '22522523', '32422432'
@@ -143,7 +149,7 @@
       c.restore(); return;
     }
     // Redraw on image load without briefly showing the fallback sword icon.
-    if (root.ArenaEngine.isSplashPotion(type) || type === 'healingPotion') { c.restore(); return; }
+    if (root.ArenaEngine.isSplashPotion(type) || type === 'healingPotion' || type === 'ironSpear') { c.restore(); return; }
     if (type === 'bow') {
       c.strokeStyle='#141b18'; c.lineWidth=7; c.beginPath(); c.moveTo(-7,-12); c.lineTo(3,-8); c.lineTo(8,0); c.lineTo(3,8); c.lineTo(-7,12); c.stroke();
       c.strokeStyle='#bc8a43'; c.lineWidth=3; c.stroke();
@@ -347,7 +353,7 @@
         c.strokeStyle='#e5c77666'; c.lineWidth=1;c.strokeRect(drop.x-20,drop.y-20+bob,40,40);
         rect(c,'#ffefaa',drop.x-18,drop.y-19+bob,5,2);rect(c,'#ffefaa',drop.x+13,drop.y+17+bob,5,2);
       }
-      item(c,drop.type,drop.x,drop.y+bob,28,0);
+      item(c,drop.type,drop.x,drop.y+bob,drop.type === 'ironSpear' ? 42 : 28,0);
     }
 
     drawDropWarning(c, mark, time) {
@@ -383,15 +389,21 @@
     }
 
     drawActor(c,a,t,reduced) {
-      // The visible head shares the simulation's 32 x 32 world-space AABB.
+      // Keep heads centred on their collision boxes, including the 20px mini slime.
       // Do not offset it with walk bobbing or round its centre independently.
       const x=a.x,y=a.y,s=32;
       const angle=Number(a.angle)||0;
       const hasSword=a.weapon==='sword'||a.weapon==='stoneSword'||a.weapon==='diamond';
-      const labelsBelow=(hasSword || a.weapon==='ironAxe')&&Math.sin(angle)<-.38;
+      const labelsBelow=(hasSword || a.weapon==='ironAxe' || a.weapon==='ironSpear')&&Math.sin(angle)<-.38;
       const inv=Number(a.invulnerable)||0;
       const hit=t>0&&(inv>0||a.hitFlash>0)&&Math.floor(t*18)%2===0;
       c.save();
+      c.save();
+      if (a.isMiniSlime) {
+        c.translate(x, y);
+        c.scale(20/32, 20/32);
+        c.translate(-x, -y);
+      }
       if(a.type==='enderman'&&!reduced) {
         for(let n=0;n<3;n++)rect(c,'#c27cf480',x+Math.sin(t+n*2.1)*25,y+Math.cos(t*1.3+n*2.5)*22,2,3);
       }
@@ -448,8 +460,14 @@
           rect(c,'#ffce59',left+1,base-5,3,6);
         }
       }
+      c.restore();
       if(hasSword) {
         this.drawHeldSword(c,a);
+      } else if(a.weapon==='ironSpear' && referenceLoaded('ironSpear')) {
+        const g = root.ArenaEngine.getSpearGeometry(a);
+        c.save(); c.translate(g.centerX, g.centerY); c.rotate(g.angle);
+        c.drawImage(REFERENCE_IMAGES.ironSpear,-g.size/2,-g.size/2,g.size,g.size);
+        c.restore();
       } else if(a.weapon==='ironAxe') {
         const g=root.ArenaEngine.getAxeGeometry(a);
         c.save(); c.translate(g.centerX,g.centerY); c.rotate(g.angle);
@@ -469,8 +487,9 @@
           item(c,a.weapon,wx,wy,30,angle+3*Math.PI/4);
         }
       }
-      const maxHp=Math.max(3,Number(a.maxHp)||3), hp=Math.max(0,Number(a.hp)||0);
-      const heartY=labelsBelow?y+29:y-33;
+      const maxHp=Math.max(1,Number(a.maxHp)||3), hp=Math.max(0,Number(a.hp)||0);
+      const labelY=y+(a.isMiniSlime?(labelsBelow?-6:6):0);
+      const heartY=labelsBelow?labelY+29:labelY-33;
       const heartWidth=12, total=Number.isInteger(hp)?maxHp*heartWidth-2:36;
       const heartColor = poisoned ? '#a3c16a' : '#ee756b';
       if(Number.isInteger(hp)) {
@@ -487,8 +506,8 @@
       const name=a.isPlayer?'你 · '+(a.name||'玩家'):(a.name||'');
       if(name) {
         const tw=c.measureText(name).width;
-        rect(c,'#14271dc7',x-tw/2-5,labelsBelow?y+44:y-53,tw+10,16);
-        c.fillStyle=a.isPlayer?'#d7ffe0':'#d8e3ca';c.fillText(name,x,labelsBelow?y+56:y-41);
+        rect(c,'#14271dc7',x-tw/2-5,labelsBelow?labelY+44:labelY-53,tw+10,16);
+        c.fillStyle=a.isPlayer?'#d7ffe0':'#d8e3ca';c.fillText(name,x,labelsBelow?labelY+56:labelY-41);
       }
       c.restore();
     }
