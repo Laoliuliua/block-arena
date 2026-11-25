@@ -1,0 +1,144 @@
+{
+  "zombie": {
+    "source": "codex-clipboard-b46e21ba-ee26-468e-8359-2d26f71380df.png",
+    "polygon": [
+      [
+        160,
+        41
+      ],
+      [
+        215,
+        42
+      ],
+      [
+        214,
+        98
+      ],
+      [
+        161,
+        97
+      ]
+    ],
+    "crop": [
+      160,
+      41,
+      216,
+      99
+    ],
+    "size": [
+      56,
+      58
+    ]
+  },
+  "skeleton": {
+    "source": "codex-clipboard-4fe45a7f-05dd-49f4-9371-e0b895e7d8a6.png",
+    "polygon": [
+      [
+        98,
+        60
+      ],
+      [
+        110,
+        54
+      ],
+      [
+        151,
+        55
+      ],
+      [
+        151,
+        98
+      ],
+      [
+        109,
+        100
+      ],
+      [
+        98,
+        93
+      ]
+    ],
+    "crop": [
+      98,
+      54,
+      152,
+      101
+    ],
+    "size": [
+      54,
+      47
+    ]
+  },
+  "enderman": {
+    "source": "codex-clipboard-196a1895-591c-4ee4-95ee-f9899dc0b0c0.png",
+    "polygon": [
+      [
+        175,
+        53
+      ],
+      [
+        210,
+        54
+      ],
+      [
+        209,
+        83
+      ],
+      [
+        176,
+        83
+      ]
+    ],
+    "crop": [
+      175,
+      53,
+      211,
+      84
+    ],
+    "size": [
+      36,
+      31
+    ]
+  },
+  "apple": {
+    "source": "codex-clipboard-83f4201a-be2c-4ed4-bfc5-3b01725066e4.png",
+    "crop": [
+      8,
+      4,
+      56,
+      60
+    ],
+    "size": [
+      48,
+      56
+    ],
+    "method": "edge-connected near-white flood fill"
+  },
+  "helmet": {
+    "source": "codex-clipboard-b7e83169-0084-4b8f-9bdb-cc88d84977cf.png",
+    "crop": [
+      24,
+      24,
+      104,
+      96
+    ],
+    "size": [
+      80,
+      72
+    ],
+    "method": "edge-connected near-white flood fill"
+  },
+  "helmetWorn": {
+    "derived_from": "helmet-reference.png",
+    "clear_opening": [
+      16,
+      32,
+      64,
+      72
+    ],
+    "size": [
+      80,
+      72
+    ]
+  }
+}
