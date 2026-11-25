@@ -23,12 +23,13 @@
               <button type="button" data-map="forest" aria-pressed="true"><canvas width="160" height="48" aria-hidden="true"></canvas><strong>林间水池</strong></button>
               <button type="button" data-map="ice" aria-pressed="false"><canvas width="160" height="48" aria-hidden="true"></canvas><strong>冰脊雪原</strong></button>
               <button type="button" data-map="third" aria-pressed="false"><canvas width="160" height="48" aria-hidden="true"></canvas><strong>藤蔓山坳</strong></button>
+              <button type="button" data-map="end" aria-pressed="false"><canvas width="160" height="48" aria-hidden="true"></canvas><strong>末地浮岛</strong></button>
             </div>
           </div>
           <h2 class="lobby-only">选择角色</h2><h2 class="match-only">出战角色</h2>
           <div id="characterList" class="character-list" role="group" aria-label="选择角色"></div>
           <div class="skill-description"><div><kbd>Q</kbd><strong id="skillName"></strong></div><p id="skillDesc"></p></div>
-          <label class="difficulty-label" for="difficulty">对手难度</label>
+          <label id="difficultyLabel" class="difficulty-label" for="difficulty">对手难度</label>
           <select id="difficulty"><option value="easy">简单</option><option value="normal" selected>普通</option><option value="hard">困难</option></select>
           <button id="startBtn" class="primary-button">开始对战 <span aria-hidden="true">▶</span></button>
         </section>
@@ -41,6 +42,7 @@
         </div>
         <div class="arena-stage"><div class="arena-wrap" id="arenaWrap">
           <canvas id="arena" width="720" height="960" tabindex="0" aria-label="对战场地"></canvas>
+          <div id="bossHud" hidden><div><strong>末影龙</strong><span id="dragonPhase"></span><b id="dragonHealth"></b></div><progress id="dragonBar" aria-label="末影龙生命" value="30" max="30"></progress></div>
           <div class="arena-top-hud"><span id="matchBadge">第 1 局</span><span id="slowStatus" hidden></span><span id="dropTimer" hidden></span></div>
           <div id="countdown" class="countdown" hidden></div>
           <div id="pauseOverlay" class="game-overlay" hidden>
@@ -89,6 +91,6 @@
     <p class="help-note">走近武器即可拾取或换装。每次只能持一件，用完消失。</p>
     <button id="helpDoneBtn" class="primary-button">关闭</button>
   </dialog>
-  <script src="ice-map.js"></script><script src="third-map.js"></script><script src="ice-art.js"></script><script src="engine.js"></script><script src="renderer.js"></script><script src="audio-assets.js"></script><script src="audio.js"></script><script src="main.js?v=touch-1"></script>
+  <script src="ice-map.js"></script><script src="third-map.js"></script><script src="ice-art.js"></script><script src="end-map.js"></script><script src="end-encounter.js"></script><script src="end-art.js"></script><script src="engine.js"></script><script src="renderer.js"></script><script src="audio-assets.js"></script><script src="audio.js"></script><script src="main.js?v=touch-1"></script>
 </body>
 </html>

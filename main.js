@@ -4,6 +4,7 @@
   const { Game, CHARACTERS, ITEM_NAMES, isBlade, isRanged, isSplashPotion } = ArenaEngine;
   const activeHand = weapon => isRanged(weapon) || weapon === 'tnt' || isSplashPotion(weapon) || weapon === 'healingPotion';
   const maps = {
+    end: {name:'末地浮岛',items:['sword','bow','tnt','apple','sharpBook','powerBook','helmet'],airdrops:['enchanted']},
     forest: {
       name: '林间水池',
       items: ['sword', 'bow', 'apple', 'helmet'],
@@ -50,6 +51,7 @@
   let selected = 'random', selectedMap = 'forest', game, paused = false, autoAim = true, spectating = false;
   let round = 1, savedResult = false, lastFrame = 0, uiClock = 0, eventId = 0, lastSound = 0;
   let aimX = 360, aimY = 350;
+  let lastMouseAim = null, blazeAim = null;
   const sound = new ArenaAudio(ArenaSoundAssets);
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const timeText = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
@@ -112,12 +114,12 @@
       const text = document.createElement('div');
       const title = document.createElement('strong'); title.textContent = ITEM_NAMES[type];
       const effect = document.createElement('span'); effect.textContent = itemEffects[type];
+      if(map===maps.end && type==='tnt') effect.textContent='放置后 2 秒爆炸，伤害随距离递减';
       text.append(title, effect); row.append(icon, text); list.append(row);
     }
     map.items.forEach(addItem);
     addItem('ironSpear');
-    addItem('poisonSplash');
-    addItem('harmingSplash');
+    if(map!==maps.end){ addItem('poisonSplash'); addItem('harmingSplash'); }
     addItem('totem');
     const heading = document.createElement('h3'); heading.textContent = '空投补给';
     list.append(heading);
@@ -130,6 +132,7 @@
       const context = thumbnail.getContext('2d');
       context.imageSmoothingEnabled = false;
       context.drawImage(renderer.terrainForMap(mapId), 72, 370, 570, 171, 0, 0, thumbnail.width, thumbnail.height);
+      if(mapId==='end' && !EndArt.tiles.complete) EndArt.tiles.addEventListener('load',()=>context.drawImage(renderer.terrainForMap(mapId),72,370,570,171,0,0,thumbnail.width,thumbnail.height),{once:true});
       button.addEventListener('click', () => {
         if (game.started || selectedMap === mapId) return;
         selectedMap = mapId;
@@ -147,6 +150,7 @@
   function clearInput() {
     keys.clear();
     pendingActions.clear();
+    lastMouseAim = blazeAim = null;
     Object.values(held).forEach(pointers => pointers.clear());
     centerStick();
   }
@@ -172,8 +176,12 @@
     document.body.dataset.arena = game.map;
     document.title = '方块竞技场 · ' + map.name;
     $('mapTitle').textContent = map.name;
+    $('difficultyLabel').textContent=game.raid?'队友水平':'对手难度';
+    const levels=game.raid?['初级','普通','高级']:['简单','普通','困难'];
+    Array.from($('difficulty').options).forEach((option,i)=>{option.textContent=levels[i];});
     $('matchRules').textContent = '与 ' + (game.actors.length - 1) + ' 名电脑角色对战，最后存活的阵营获胜。' +
       (game.map === 'ice' ? ' 冰面会打滑，深蓝色冰脊可作掩体。' : game.map === 'third' ? ' 从西、南洞口进入山体；附魔书拾取即生效。' : '');
+    if(game.raid) $('matchRules').textContent='与四名队友合力击败末影龙。先远射水晶切断治疗，留意友伤、龙息与岛边的虚空。';
     mapButtons.forEach(button => {
       button.setAttribute('aria-pressed', String(button.dataset.map === selectedMap));
       button.disabled = startImmediately;
@@ -222,8 +230,14 @@
     const familyWin = won && winner?.type === 'slime';
     $('resultDescription').textContent = familyWin ? `史莱姆阵营存活 ${game.remaining} 只 · 第 1 名` :
       `${game.player.name} · 第 ${won ? 1 : game.player.rank || game.remaining + 1} 名`;
-    $('resultKills').textContent = game.stats.kills;
-    $('resultTime').textContent = timeText(game.player.deathTime ?? game.time);
+    if(game.raid){
+      $('resultTitle').textContent=won?'屠龙成功':'队伍全灭';
+      $('resultDescription').textContent=won?`末影龙已被击败 · 队伍存活 ${game.remaining} 人`:'末影龙守住了末地浮岛';
+    }
+    $('resultKills').textContent = game.raid ? game.raid.crystals.filter(c=>!c.alive).length+' / 5' : game.stats.kills;
+    $('resultKills').nextElementSibling.textContent = game.raid ? '摧毁水晶' : '淘汰';
+    $('resultTime').textContent = timeText(game.raid ? game.time : game.player.deathTime ?? game.time);
+    $('resultTime').nextElementSibling.textContent = game.raid ? '战斗用时' : '存活时间';
     $('spectateBtn').hidden = won || game.finished;
     $('resultOverlay').hidden = false;
     if (won) sound.play({type:'win'});
@@ -236,7 +250,9 @@
   }
   function currentInput() {
     const down = (...codes) => codes.some(c => keys.has(c));
-    if (touchMode || autoAim) {
+    if (game.player.blazeVolley && blazeAim) {
+      aimX = blazeAim.x; aimY = blazeAim.y;
+    } else if (touchMode || autoAim) {
       const targets = game.opponentsOf(game.player);
       targets.sort((a, b) => Math.hypot(a.x-game.player.x, a.y-game.player.y) - Math.hypot(b.x-game.player.x, b.y-game.player.y));
       if (targets[0]) { aimX = targets[0].x; aimY = targets[0].y; }
@@ -245,8 +261,8 @@
       x: touchMode ? stick.x : Number(down('KeyD', 'ArrowRight')) - Number(down('KeyA', 'ArrowLeft')),
       y: touchMode ? stick.y : Number(down('KeyS', 'ArrowDown')) - Number(down('KeyW', 'ArrowUp')),
       aimX, aimY,
-      shoot: activeHand(game.player.weapon) && (held.shoot.size > 0 || down('KeyJ', 'KeyK') || pendingActions.has('shoot')),
-      skill: held.skill.size > 0 || down('KeyQ') || pendingActions.has('skill'),
+      shoot: !game.player.blazeVolley && activeHand(game.player.weapon) && (held.shoot.size > 0 || down('KeyJ', 'KeyK') || pendingActions.has('shoot')),
+      skill: game.player.type !== 'blaze' && (held.skill.size > 0 || down('KeyQ') || pendingActions.has('skill')),
       dash: held.dash.size > 0 || down('Space') || pendingActions.has('dash')
     };
     pendingActions.clear();
@@ -266,7 +282,14 @@
     $('phaseLabel').textContent = paused ? '已暂停' : game.finished ? '对战结束' : spectating ? '观战中' : game.countdown > 0 ? '准备开始' : game.started ? '对战进行中' : '等待入场';
     $('aliveCount').textContent = `${game.remaining} / ${rosterActors.length}`;
     $('dropTimer').hidden = !game.started;
-    $('dropTimer').textContent = game.time > 90 ? '边界收缩' : `空投 ${Math.max(0, Math.ceil(game.nextAirDrop - game.time))}s`;
+    $('dropTimer').textContent = !game.raid && game.time > 90 ? '边界收缩' : `空投 ${Math.max(0, Math.ceil(game.nextAirDrop - game.time))}s`;
+    $('bossHud').hidden=!game.raid;
+    if(game.raid){
+      const {dragon,crystals,phase}=game.raid;
+      $('dragonHealth').textContent='♥ '+dragon.hp+' / 30';
+      $('dragonBar').value=dragon.hp;
+      $('dragonPhase').textContent=(phase==='perch'?'落脚':'飞行')+' · 水晶 '+crystals.filter(c=>c.alive).length+'/5';
+    }
     $('playerHealth').textContent = game.map !== 'forest' || !Number.isInteger(p.hp) ? `♥ ${p.hp} / ${p.maxHp}` :
       '♥ '.repeat(p.hp) + '♡ '.repeat(p.maxHp - p.hp);
     $('playerShield').textContent = [p.shield ? '◆' + p.shield : '', p.armor ? ITEM_NAMES[p.armorType] : ''].filter(Boolean).join(' ');
@@ -283,13 +306,14 @@
     if (!slowed.hidden) {
       slowed.textContent = p.inWeb ? '蛛网 · 移速 20%' : `迟缓 ${Math.ceil(p.slowRemaining)}s`;
     }
-    const usable = activeHand(p.weapon);
-    if (displayedWeapon !== p.weapon) {
-      displayedWeapon = p.weapon;
-      const label = ITEM_NAMES[p.weapon] || '空手';
-      $('attackState').textContent = p.weapon==='poisonSplash' ? '剧毒药水' : p.weapon==='harmingSplash' ? '伤害药水' : label;
+    const hand = p.blazeVolley ? 'fireball' : p.weapon;
+    const usable = !!p.blazeVolley || activeHand(hand);
+    if (displayedWeapon !== hand) {
+      displayedWeapon = hand;
+      const label = hand === 'fireball' ? '烈焰弹' : ITEM_NAMES[hand] || '空手';
+      $('attackState').textContent = hand==='poisonSplash' ? '剧毒药水' : hand==='harmingSplash' ? '伤害药水' : label;
       const thrown = isSplashPotion(p.weapon) || p.weapon==='snowball';
-      const instruction = p.weapon === 'ironSpear' ? '矛尖触敌' : p.weapon === 'ironAxe' ? '斧刃触敌' : p.weapon === 'tnt' ? '放在脚下' :
+      const instruction = hand === 'fireball' ? '点场地发射' : p.weapon === 'ironSpear' ? '矛尖触敌' : p.weapon === 'ironAxe' ? '斧刃触敌' : p.weapon === 'tnt' ? '放在脚下' :
         p.weapon === 'healingPotion' ? '饮用 +1' : thrown ? '投掷 · 1 次' :
         usable ? '射击 · 1 发' : isBlade(p.weapon) ? '剑刃触敌' : '拾剑或矛可近战';
       $('weaponAction').textContent = instruction;
@@ -297,9 +321,9 @@
       $('attackBtn').title = usable ? instruction + '（左键、右键、J 或 K）' : instruction;
       $('attackBtn').setAttribute('aria-label', label + '，' + instruction);
       $('attackBtn').classList.toggle('passive-weapon', !usable);
-      $('heldIcon').hidden = p.weapon === 'fist';
-      $('attackBtn').classList.toggle('unarmed', p.weapon === 'fist');
-      if (p.weapon !== 'fist') ArenaRenderer.drawItem($('heldIcon'), p.weapon, 30);
+      $('heldIcon').hidden = hand === 'fist';
+      $('attackBtn').classList.toggle('unarmed', hand === 'fist');
+      if (hand !== 'fist') ArenaRenderer.drawItem($('heldIcon'), hand, 30);
     }
     const needsSword = p.type === 'zombie' && !isBlade(p.weapon);
     const passive = p.type === 'slime';
@@ -307,13 +331,14 @@
       $('skillAction').textContent = p.isMiniSlime ? '小史莱姆' : CHARACTERS.slime.skillName;
       $('skillBtn').title = p.isMiniSlime ? '小史莱姆没有主动技能' : CHARACTERS.slime.skillDescription;
     }
-    $('skillState').textContent = passive ? (p.isMiniSlime ? '无主动技能' : '被动') : p.drainReady ? `吸血 ${Math.ceil(p.drainRemaining)}s` :
+    $('aimLabel').textContent = p.blazeVolley ? '火球瞄准' : autoAim ? '自动瞄准' : '鼠标瞄准';
+    $('skillState').textContent = p.blazeVolley ? `剩余 ${p.blazeVolley.left} 发` : passive ? (p.isMiniSlime ? '无主动技能' : '被动') : p.drainReady ? `吸血 ${Math.ceil(p.drainRemaining)}s` :
       needsSword ? (game.map === 'ice' ? '需石剑' : '需铁剑') : p.skillCooldown > .1 ? `${p.skillCooldown.toFixed(1)}s` : '就绪';
     $('dashState').textContent = p.dashCooldown > .1 ? `${p.dashCooldown.toFixed(1)}s` : '就绪';
     [['skillBtn', p.skillCooldown], ['dashBtn', p.dashCooldown]].forEach(([id, cd]) => { $(id).classList.toggle('ready', cd <= .1); $(id).classList.toggle('cooling', cd > .1); });
     const controlsLocked = !game.started || !p.alive || paused || game.finished || game.countdown > 0;
     $('attackBtn').disabled = controlsLocked || !usable;
-    $('skillBtn').disabled = controlsLocked || needsSword || passive;
+    $('skillBtn').disabled = controlsLocked || needsSword || passive || !!p.blazeVolley;
     $('dashBtn').disabled = controlsLocked;
     $('pauseBtn').disabled = !game.started || game.finished;
     $('pauseBtn').textContent = paused ? '▶' : 'Ⅱ';
@@ -347,10 +372,33 @@
       spectating = true; clearInput(); updateUI();
     }
     if ((game.status === 'won' || game.status === 'lost') && (!savedResult || (spectating && game.finished))) finish();
-    uiClock += dt; if (uiClock >= .1 || displayedWeapon !== game.player.weapon) { updateUI(); uiClock = 0; }
+    uiClock += dt; if (uiClock >= .1 || displayedWeapon !== (game.player.blazeVolley ? 'fireball' : game.player.weapon)) { updateUI(); uiClock = 0; }
     requestAnimationFrame(frame);
   }
   const gameCodes = new Set(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','KeyJ','KeyK','KeyQ','KeyR','KeyE','Escape']);
+  // Use discrete presses for fireballs. A held button or a long simulation
+  // frame must never spend an extra charge or use the weapon underneath.
+  function pressBlazeAction(action, point = null) {
+    const p = game.player;
+    if (p.type !== 'blaze' || paused || game.status !== 'playing' || !p.alive) return false;
+    if (action === 'skill') {
+      if (game.useSkill(p)) {
+        blazeAim = touchMode ? null : lastMouseAim;
+        held.shoot.clear(); pendingActions.delete('shoot');
+        keys.delete('KeyJ'); keys.delete('KeyK');
+        updateUI();
+      }
+      return true;
+    }
+    if (action !== 'shoot' || !p.blazeVolley) return false;
+    if (point) blazeAim = point;
+    const target = blazeAim || {x:aimX, y:aimY};
+    const dx = target.x-p.x, dy = target.y-p.y;
+    game.fireBlazeShot(p, dx || dy ? Math.atan2(dy,dx) : p.angle);
+    if (!p.blazeVolley) blazeAim = null;
+    updateUI();
+    return true;
+  }
   addEventListener('keydown', e => {
     if (gameCodes.has(e.code) || e.code === 'Tab' || e.code === 'Enter') setTouchMode(false);
     if ($('helpDialog').open) return;
@@ -362,16 +410,23 @@
       if (e.code === 'KeyR' && game.started) restart();
       if (e.code === 'Enter' && !game.started && e.target === canvas) start();
       const action = {KeyJ:'shoot',KeyK:'shoot',KeyQ:'skill',Space:'dash'}[e.code];
+      if (pressBlazeAction(action)) return;
       if (action && game.status === 'playing' && !paused) pendingActions.add(action);
+      keys.add(e.code);
     }
-    keys.add(e.code);
   });
   addEventListener('keyup', e => keys.delete(e.code));
   addEventListener('blur', () => { clearInput(); if (game.started && !game.finished) setPause(true); });
   document.addEventListener('visibilitychange', () => { if (document.hidden) { clearInput(); setPause(true); } });
+  function arenaPoint(e) {
+    const rect = canvas.getBoundingClientRect();
+    return {x:(e.clientX-rect.left)/rect.width*720, y:(e.clientY-rect.top)/rect.height*960};
+  }
   function aimAtPointer(e) {
-    if (touchMode || autoAim || e.pointerType !== 'mouse') return;
-    const rect = canvas.getBoundingClientRect(); aimX = (e.clientX - rect.left) / rect.width * 720; aimY = (e.clientY - rect.top) / rect.height * 960;
+    if (e.pointerType !== 'mouse' || touchMode) return;
+    lastMouseAim = arenaPoint(e);
+    if (game.player.blazeVolley) blazeAim = lastMouseAim;
+    if (!autoAim || game.player.blazeVolley) { aimX=lastMouseAim.x; aimY=lastMouseAim.y; }
   }
   addEventListener('pointerdown', e => {
     if (e.pointerType) setTouchMode(e.pointerType !== 'mouse');
@@ -381,7 +436,9 @@
   }, {capture: true, passive: true});
   canvas.addEventListener('pointermove', aimAtPointer);
   canvas.addEventListener('pointerdown', e => {
-    if (touchMode || !game.started || paused || !game.player.alive) return;
+    if (!game.started || paused || !game.player.alive || (e.button !== 0 && e.button !== 2)) return;
+    if (pressBlazeAction('shoot', arenaPoint(e))) { e.preventDefault(); return; }
+    if (touchMode) return;
     canvas.focus({ preventScroll: true });
     if (activeHand(game.player.weapon) && (e.button === 0 || e.button === 2)) {
       aimAtPointer(e);
@@ -401,11 +458,12 @@
     button.addEventListener('pointerdown', e => {
       if (button.disabled) return;
       e.preventDefault();
+      if (pressBlazeAction(key)) return;
       if (!touchMode) held[key].add(e.pointerId);
       pendingActions.add(key);
       button.setPointerCapture(e.pointerId);
     });
-    button.addEventListener('click', e => { if (e.detail === 0) pendingActions.add(key); });
+    button.addEventListener('click', e => { if (e.detail === 0 && !pressBlazeAction(key)) pendingActions.add(key); });
   });
   function moveStick(e) {
     const bounds = joystick.getBoundingClientRect();
@@ -452,6 +510,7 @@
   window.blockArena = Object.freeze({ audioStatus: () => sound.status(), snapshot: () => ({
     map: game.map, status: game.status, paused, autoAim: touchMode || autoAim, time: game.time, remaining: game.remaining,
     character: game.player.type, selection: selected, round, countdown: game.countdown, player: { ...game.player },
+    raid: game.raid ? {hp:game.raid.dragon.hp,phase:game.raid.phase,crystals:game.raid.crystals.filter(c=>c.alive).length} : null,
     actors: game.actors.map(({ id, type, hp, maxHp, alive, isPlayer, isMiniSlime, slimeParentId }) =>
       ({ id, type, hp, maxHp, alive, isPlayer, isMiniSlime, slimeParentId })),
     webs: game.webs.map(({ ownerId, x, y, radius }) => ({ ownerId, x, y, radius })),

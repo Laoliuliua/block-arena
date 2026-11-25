@@ -302,7 +302,10 @@
         layer.width = W; layer.height = H;
         const context = layer.getContext('2d');
         context.imageSmoothingEnabled = false;
-        if (map === 'third') root.ThirdMap.drawTerrain(context, caveOpen);
+        if(map==='end') {
+          root.EndArt.terrain(context);
+          if(!root.EndArt.tiles.complete) root.EndArt.tiles.addEventListener('load',()=>root.EndArt.terrain(context),{once:true});
+        } else if (map === 'third') root.ThirdMap.drawTerrain(context, caveOpen);
         else root.IceMap.drawTerrain(context);
         this.mapLayers.set(key, layer);
       }
@@ -317,6 +320,7 @@
       if(game.map==='forest' && !opt.reducedMotion) this.water(c,t);
       const safe=Number(game.safeInset)||0;
       if(safe>28) this.zone(c,safe,t);
+      if(game.raid) root.EndArt.ground(c,game.raid,t);
       for (const web of game.webs || []) this.drawWeb(c, game, web);
       if (game.dropWarning) this.drawDropWarning(c, game.dropWarning, t);
       const items=game.items||[];
@@ -326,6 +330,7 @@
       for(const a of actors)if(!a.alive)this.drawGrave(c,a);
       for(const a of actors.filter(a=>a.alive).sort((a,b)=>a.y-b.y))this.drawActor(c,a,t,opt.reducedMotion);
       for(const p of game.projectiles||[])this.drawProjectile(c,p,t,opt.reducedMotion);
+      if(game.raid) root.EndArt.sky(c,game.raid,t);
       for(const e of game.effects||[])this.drawEffect(c,e,t,opt.reducedMotion);
       const player=game.player || actors.find(a=>a.isPlayer);
       if(opt.showAim&&player&&player.alive&&Number.isFinite(opt.aimX)&&Number.isFinite(opt.aimY))this.crosshair(c,opt.aimX,opt.aimY,t);

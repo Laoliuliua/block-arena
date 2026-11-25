@@ -9,7 +9,7 @@
     zombie: { name: '僵尸', color: '#71a894', skillName: '生命汲取', skillDescription: '持剑蓄能，6 秒内剑刃击伤敌人可回复 1 生命', skillCooldown: 9, icon: '♥' },
     skeleton: { name: '骷髅', color: '#d6e0dc', skillName: '三重箭雨', skillDescription: '朝瞄准方向射出三支箭，不消耗箭矢', skillCooldown: 7, icon: '➶' },
     enderman: { name: '末影人', color: '#b58bee', skillName: '末影闪现', skillDescription: '向瞄准方向传送，短暂无敌', skillCooldown: 7, icon: '◇' },
-    blaze: { name: '烈焰人', color: '#f9b84e', skillName: '烈焰弹', skillDescription: '连续发射三枚烈焰弹，命中点燃 3 秒，每秒造成 0.25 点伤害', skillCooldown: 8, icon: '✹' },
+    blaze: { name: '烈焰人', color: '#f9b84e', skillName: '烈焰弹', skillDescription: '启用后点击场地逐发瞄准射击，射完 3 枚后冷却 8 秒。命中点燃 3 秒，每秒造成 0.25 点伤害。', skillCooldown: 8, icon: '✹' },
     stray: { name: '流浪者', color: '#a3d7ed', skillName: '迟缓之箭', skillDescription: '射出一箭，造成 1 点伤害，使目标移速减半 5 秒', skillCooldown: 8, icon: '➶' },
     spider: { name: '蜘蛛', color: '#e18989', skillName: '布置蛛网', skillDescription: '蛛网持续整局。网内移速降至原速的 20%，蜘蛛免疫', skillCooldown: 8, icon: '▦' },
     vindicator: { name: '卫道士', color: '#acb5af', skillName: '唤出铁斧', skillDescription: '铁斧触敌造成 2 点伤害后消失；未命中可持有 4 秒', skillCooldown: 12, icon: '⚒' },
@@ -21,6 +21,7 @@
     sharpBook: '锋利附魔书', powerBook: '力量附魔书', tnt: 'TNT', regenPotion: '恢复药水 II', totem: '不死图腾',
     stoneSword: '石剑', snowball: '雪球', berries: '甜浆果', boots: '皮革靴子', potato: '烤土豆', crossbow: '弩', fireworkBow: '烟花弩' };
   const MAP_LOOT = {
+    end: {common:['sword','bow','apple','helmet','tnt','sharpBook','powerBook'], supplies:['sword','bow','bow'], rare:['enchanted']},
     forest: { common: ['sword', 'bow', 'apple', 'helmet', 'apple'], supplies: ['sword', 'sword', 'bow'], rare: ['enchanted'] },
     ice: { common: ['snowball', 'bow', 'stoneSword', 'berries', 'boots'], supplies: ['stoneSword', 'snowball', 'bow'], rare: ['potato', 'crossbow', 'fireworkBow'] },
     third: { common: ['sword', 'bow', 'apple', 'regenPotion', 'tnt'], supplies: ['sword', 'bow'], recovery: ['apple','regenPotion'], rare: ['sharpBook', 'powerBook'] }
@@ -49,7 +50,7 @@
 
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-  const actorRadius = actor => actor.isMiniSlime ? 10 : WORLD.actorRadius;
+  const actorRadius = actor => actor.hitRadius ?? (actor.isMiniSlime ? 10 : WORLD.actorRadius);
   const angleDifference = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
   const inWater = (x, y) => (Math.abs(x - 360) < 64 && Math.abs(y - 480) < 100) || (Math.abs(x - 360) < 100 && Math.abs(y - 480) < 64);
 
@@ -118,7 +119,8 @@
   class Game {
     constructor(options = {}) {
       this.map = Object.hasOwn(MAP_LOOT, options.map) ? options.map : 'forest';
-      this.terrain = this.map === 'third' ? (root.ThirdMap || require('./third-map.js'))
+      this.terrain = this.map === 'end' ? (root.EndMap || require('./end-map.js'))
+        : this.map === 'third' ? (root.ThirdMap || require('./third-map.js'))
         : this.map === 'ice' ? (root.IceMap || require('./ice-map.js')) : null;
       this.loot = MAP_LOOT[this.map];
       this.difficulty = LEVELS[options.difficulty] ? options.difficulty : 'normal';
@@ -140,7 +142,7 @@
       this.nextDrop = this.map === 'third' ? 9 : 12;
       this.nextWeaponDrop = this.map === 'third' ? 6 : 4;
       this.swordSupplySlots = 0;
-      this.nextTntDrop = this.map === 'third' ? 10 : Infinity;
+      this.nextTntDrop = this.map === 'third' || this.map === 'end' ? 10 : Infinity;
       this.nextTotemDrop = 45;
       this.potionDrops = { poisonSplash: 0, harmingSplash: 0 };
       this.nextAirDrop = this.map === 'third' ? 30 : 45;
@@ -165,6 +167,7 @@
         this.actors.push(this.createActor(type, spawn, index === 0));
       });
       this.player = this.actors[0];
+      this.raid = this.map === 'end' ? new (root.EndEncounter || require('./end-encounter.js'))(this) : null;
       const initialItems = [
         ['ironSpear', 116, 470], ['sword', 580, 460], ['bow', 210, 300],
         ['bow', 525, 820], ['apple', 570, 315], ['apple', 330, 780],
@@ -177,7 +180,7 @@
       if (this.terrain) this.terrain.initialItems.forEach(({ type, x, y }) => this.spawnItem(type, x, y));
       else initialItems.forEach(([type, x, y]) => this.spawnItem(type, x, y));
       if (this.terrain) this.spawnItem('ironSpear', spawns[0].x + 95, spawns[0].y + 36);
-      this.addEvent('进入' + ({forest:'林间水池', ice:'冰脊雪原', third:'藤蔓山坳'})[this.map], 'info');
+      this.addEvent('进入' + ({forest:'林间水池', ice:'冰脊雪原', third:'藤蔓山坳',end:'末地浮岛'})[this.map], 'info');
     }
 
     createActor(type, spawn, isPlayer, slimeParentId = null) {
@@ -206,9 +209,12 @@
     get remaining() { return this.actors.filter(actor => actor.alive).length; }
 
     opponentsOf(actor) {
+      if(this.raid) return this.raid.targets.filter(target=>target.alive);
       return this.actors.filter(other => other.alive && other !== actor &&
         !(actor.type === 'slime' && other.type === 'slime'));
     }
+
+    get damageTargets() { return this.raid ? this.actors.concat(this.raid.targets) : this.actors; }
 
     spearHoldBonus(actor) {
       if (actor.weapon !== 'ironSpear' || actor.spearEquippedAt == null) return 0;
@@ -225,8 +231,16 @@
         for (let attempt = 0; attempt < 12; attempt++) {
           const angle = parent.angle + TAU * (i / 3 + attempt / 12);
           child.x = parent.x; child.y = parent.y;
-          this.move(child, Math.cos(angle) * 27, Math.sin(angle) * 27);
+          const dx = Math.cos(angle) * 27, dy = Math.sin(angle) * 27;
+          if (this.raid) {
+            this.terrain.moveActor(child, dx, dy, actorRadius(child));
+            if (!this.terrain.touchesLand(child.x, child.y, actorRadius(child))) continue;
+          } else this.move(child, dx, dy);
           if (children.every(sibling => distance(child, sibling) >= 20)) break;
+        }
+        if (this.raid && !this.terrain.touchesLand(child.x, child.y, actorRadius(child))) {
+          const spawn = this.terrain.safePosition(parent.x, parent.y);
+          child.x = spawn.x; child.y = spawn.y;
         }
         child.spawnX = child.x; child.spawnY = child.y;
         child.angle = parent.angle;
@@ -252,7 +266,7 @@
       if (this.started) return;
       this.started = true;
       this.countdown = 3;
-      this.addEvent('准备就绪 · 最后存活的阵营获胜', 'info');
+      this.addEvent(this.raid?'准备就绪 · 五人迎战末影龙':'准备就绪 · 最后存活的阵营获胜', 'info');
     }
 
     addEvent(text, type = 'info') {
@@ -274,7 +288,7 @@
     }
 
     dropPosition(x, y) {
-      if (this.map === 'third' && x == null && y == null) {
+      if ((this.map === 'third' || this.raid) && x == null && y == null) {
         // Random ground loot shares the walkable grid. Keep it off actors and
         // other items, including the reserved spot for the next enchanted book.
         if (!this.dropSites) {
@@ -335,7 +349,7 @@
         if (this.countdown <= 0.00001) {
           this.countdown = 0;
           this.status = 'playing';
-          this.addEvent('战斗开始！拾取道具，生存到最后', 'start');
+          this.addEvent(this.raid?'战斗开始！摧毁水晶，击败末影龙':'战斗开始！拾取道具，生存到最后', 'start');
         }
         return;
       }
@@ -343,7 +357,7 @@
       this.effects.forEach(effect => { effect.ttl -= dt; });
       this.effects = this.effects.filter(effect => effect.ttl > 0);
       const now = this.time + 1e-8;
-      for (const type of POTION_TYPES) {
+      if(!this.raid) for (const type of POTION_TYPES) {
         const count = this.potionDrops[type];
         if (count < 3 && now >= POTION_FIRST_DROPS[type] + count * 20) {
           this.spawnItem(type);
@@ -354,7 +368,20 @@
         if (this.items.filter(item => item.type === 'totem').length < 2) this.spawnItem('totem');
         this.nextTotemDrop += 45;
       }
-      if (this.map === 'third') {
+      if(this.raid) {
+        if(now>=this.nextWeaponDrop) {
+          if(this.items.filter(i=>i.type==='bow').length<5) this.spawnItem('bow');
+          if(this.items.filter(i=>isGroundMelee(i.type)).length<5) this.spawnSupply('sword');
+          this.nextWeaponDrop+=4;
+        }
+        if(now>=this.nextTntDrop) {
+          if(this.items.filter(i=>i.type==='tnt').length<3) this.spawnItem('tnt');
+          this.nextTntDrop+=10;
+        }
+        if(now>=this.nextDrop) {
+          this.replenish(['apple','helmet','sharpBook','powerBook'],10);this.nextDrop+=8;
+        }
+      } else if (this.map === 'third') {
         if (now >= this.nextTntDrop) { this.spawnItem('tnt'); this.nextTntDrop += 10; }
         if (now >= this.nextWeaponDrop) { this.replenish(this.loot.supplies, 6); this.nextWeaponDrop += 6; }
         if (now >= this.nextDrop) { this.replenish(this.loot.recovery, 4); this.nextDrop += 9; }
@@ -388,7 +415,7 @@
         this.addEvent('高级空投到达 · ' + ITEM_NAMES[drop.type], 'airdrop');
         this.nextAirDrop += this.map === 'third' ? 30 : 45;
       }
-      if (this.time > 90) {
+      if (!this.raid && this.time > 90) {
         this.safeInset = Math.min(342, WORLD.border + (this.time - 90) * 3);
         if (!this._announcedStorm) {
           this._announcedStorm = true;
@@ -396,7 +423,8 @@
         }
       }
 
-      const previousPoses = new Map(this.actors.map(actor => [actor.id, { x: actor.x, y: actor.y, angle: actor.angle, weapon: actor.weapon }]));
+      const previousPoses = new Map(this.damageTargets.map(actor => [actor.id, { x: actor.x, y: actor.y, angle: actor.angle, weapon: actor.weapon }]));
+      if(this.raid) this.raid.update(dt);
       this.actors.forEach(actor => { actor.swordDiscontinuous = false; });
       for (const actor of this.actors) {
         if (!actor.alive) continue;
@@ -436,7 +464,6 @@
           }
           if (!actor.alive) continue;
         }
-        if (actor.blazeVolley && now >= actor.blazeVolley.next) this.fireBlazeShot(actor);
         const control = actor.isPlayer ? input : this.aiControl(actor, dt);
         let mx = Number(control.x) || 0, my = Number(control.y) || 0;
         const length = Math.hypot(mx, my);
@@ -467,12 +494,17 @@
         actor.moving = Math.hypot(actor.slideX, actor.slideY) > 7;
         if (actor.moving) actor.walkPhase += moveTime * speed / 12;
         this.move(actor, actor.slideX * moveTime + actor.vx * dt, actor.slideY * moveTime + actor.vy * dt);
+        if(!actor.alive) continue;
         actor.vx *= Math.exp(-dt * 11); actor.vy *= Math.exp(-dt * 11);
         if (control.dash && actor.dashCooldown <= 0) this.dash(actor, mx, my);
+        if (!actor.alive) continue;
         const cast = control.skill && actor.skillCooldown <= 0 && this.useSkill(actor);
+        if (!actor.alive) continue;
+        if (!actor.isPlayer && actor.blazeVolley && now >= actor.blazeVolley.next)
+          this.fireBlazeShot(actor, desiredAngle);
         if (control.shoot && !(cast && actor.type === 'witch')) this.shoot(actor);
         this.pickUp(actor);
-        if (this.time > 90) {
+        if (!this.raid && this.time > 90) {
           const s = this.safeInset;
           const exposed = actor.x < s || actor.x > WORLD.width - s || actor.y < s || actor.y > WORLD.height - s;
           if (exposed) {
@@ -499,6 +531,10 @@
     move(actor, dx, dy) {
       if (this.terrain) {
         this.terrain.moveActor(actor, dx, dy, actorRadius(actor));
+        if(this.raid && actor.alive && !this.terrain.touchesLand(actor.x,actor.y,actorRadius(actor))) {
+          actor.hp=0;
+          this.eliminate(actor,null,true);
+        }
         return;
       }
       const margin = WORLD.border + actorRadius(actor);
@@ -542,6 +578,7 @@
     }
 
     aiControl(actor, dt) {
+      if(this.raid) return this.raid.control(actor,dt);
       actor.aiTimer -= dt;
       const enemies = this.opponentsOf(actor);
       if (!enemies.length) {
@@ -690,7 +727,7 @@
         const from = old && old.weapon === actor.weapon && !actor.swordDiscontinuous ? old : actor;
         const angleDelta = angleDifference(actor.angle, from.angle);
         const candidates = [];
-        for (const target of this.actors) {
+        for (const target of this.damageTargets) {
           if (!target.alive || target === actor || target.invulnerable > 0) continue;
           const oldTarget = previousPoses?.get(target.id);
           const targetFrom = oldTarget && !target.swordDiscontinuous ? oldTarget : target;
@@ -706,7 +743,7 @@
           for (let sample = 0; sample <= samples; sample++) {
             const t = sample / samples;
             const pose = { x: from.x + (actor.x - from.x) * t, y: from.y + (actor.y - from.y) * t, angle: from.angle + angleDelta * t };
-            const head = { x: targetFrom.x + (target.x - targetFrom.x) * t, y: targetFrom.y + (target.y - targetFrom.y) * t, isMiniSlime: target.isMiniSlime };
+            const head = { x: targetFrom.x + (target.x - targetFrom.x) * t, y: targetFrom.y + (target.y - targetFrom.y) * t, hitRadius:headRadius, base:target.base, raidKind:target.raidKind };
             const geometry = geometryFor(pose);
             if (intersects(geometry, head) && this.clearLine(pose, head)) {
               candidates.push({ target, t, distance: distance(pose, head),
@@ -789,24 +826,29 @@
       for (const bomb of this.bombs) {
         bomb.fuse = Math.max(0, bomb.detonateAt - this.time);
         if (bomb.fuse > 1e-8) continue;
-        this.effect('explosion', bomb.x, bomb.y, { sourceType: 'tnt', radius: bomb.radius, ttl: 0.65, color: '#ffac61' });
         const owner = this.actors.find(actor => actor.id === bomb.ownerId);
-        for (const target of this.actors) {
-          const d = distance(target, bomb);
-          if (!target.alive || d >= bomb.radius || !this.clearLine(bomb, target)) continue;
-          // Distance is measured when the fuse ends; quarter hearts match the other gear.
-          const intensity = 1 - d / bomb.radius;
-          const amount = 0.5 + Math.round(10 * intensity) / 4;
-          this.damage(target, amount, owner, { origin: bomb, knockback: 300 * intensity });
-        }
+        this.explode(bomb,bomb.radius,owner,'tnt');
       }
       this.bombs = this.bombs.filter(bomb => bomb.fuse > 1e-8);
+    }
+
+    explode(origin,radius,owner,sourceType) {
+      this.effect('explosion',origin.x,origin.y,{sourceType,radius,ttl:.65,color:sourceType==='crystal'?'#e99eff':'#ffac61'});
+      for(const target of this.damageTargets.filter(a=>a.alive)) {
+        const d=distance(target,origin);
+        if(d>=radius || !this.clearLine(origin,target)) continue;
+        const intensity=1-d/radius;
+        this.damage(target,.5+Math.round(10*intensity)/4,owner,{origin,knockback:300*intensity});
+      }
     }
 
     fireProjectile(actor, angle, type = 'arrow', weaponBonus = 0) {
       const speed = type === 'fireball' ? 290 : type === 'bolt' ? 505 : type === 'snowball' ? 360 : 410;
       const damage = type === 'fireball' ? 0 : type === 'snowball' ? 0.25 : type === 'bolt' ? 2 : type === 'firework' ? 1.5 : 1;
-      const projectile = { id: this._nextId++, x: actor.x + Math.cos(angle) * 23, y: actor.y + Math.sin(angle) * 23,
+      // In the End the muzzle can already overlap a perched target. Include
+      // the stretch from the shooter's centre when testing the first impact.
+      const offset = this.raid ? 0 : 23;
+      const projectile = { id: this._nextId++, x: actor.x + Math.cos(angle) * offset, y: actor.y + Math.sin(angle) * offset,
         angle, ownerId: actor.id, type, ttl: type === 'fireball' ? 2.4 : 2.2, speed, damage: damage + weaponBonus };
       if (!this.clearLine(actor, projectile, 2)) {
         if (arrowLike(type)) this.cue('arrowHit', actor, actor);
@@ -829,12 +871,16 @@
       return true;
     }
 
-    fireBlazeShot(actor) {
+    fireBlazeShot(actor, angle = actor.angle) {
       const volley = actor.blazeVolley;
+      if (!actor.alive || !volley) return false;
       this.cue('blazeShoot', actor, actor);
-      this.fireProjectile(actor, volley.angle, 'fireball');
-      if (--volley.left === 0) actor.blazeVolley = null;
-      else volley.next += 0.3;
+      this.fireProjectile(actor, angle, 'fireball');
+      if (--volley.left === 0) {
+        actor.blazeVolley = null;
+        actor.skillCooldown = CHARACTERS.blaze.skillCooldown * (actor.isPlayer ? 1 : 1.5);
+      } else if (!actor.isPlayer) volley.next = this.time + 0.3;
+      return true;
     }
 
     ignite(victim, ownerId) {
@@ -848,11 +894,16 @@
     }
 
     useSkill(actor) {
-      if (!actor.alive || actor.type === 'slime' || actor.skillCooldown > 0) return false;
+      if (!actor.alive || actor.type === 'slime' || actor.skillCooldown > 0 || actor.blazeVolley) return false;
       if (actor.type === 'zombie' && !isBlade(actor.weapon)) return false;
-      actor.skillCooldown = CHARACTERS[actor.type].skillCooldown * (actor.isPlayer || actor.type === 'vindicator' || actor.type === 'witch' ? 1 : 1.5);
       if (actor.isPlayer) this.stats.skills++;
-      const enemies = this.actors.filter(other => other !== actor && other.alive);
+      if (actor.type === 'blaze') {
+        actor.blazeVolley = { left: 3 };
+        if (!actor.isPlayer) this.fireBlazeShot(actor);
+        return true;
+      }
+      actor.skillCooldown = CHARACTERS[actor.type].skillCooldown * (actor.isPlayer || actor.type === 'vindicator' || actor.type === 'witch' ? 1 : 1.5);
+      const enemies = this.damageTargets.filter(other => other !== actor && other.alive);
       if (actor.type === 'creeper') {
         this.effect('explosion', actor.x, actor.y, { radius: 128, ttl: 0.55, color: '#c4fa85' });
         enemies.filter(other => distance(actor, other) < 128 && this.clearLine(actor, other)).forEach(other => this.damage(other, 1, actor, { knockback: 450 }));
@@ -888,14 +939,12 @@
         this.effect('teleport', oldX, oldY, { radius: 40, ttl: 0.65, color: '#ca8cff' });
         this.effect('teleport', actor.x, actor.y, { radius: 40, ttl: 0.65, color: '#ca8cff' });
         this.cue('teleport', actor, actor);
-      } else if (actor.type === 'blaze') {
-        actor.blazeVolley = { left: 3, next: this.time, angle: actor.angle };
-        this.fireBlazeShot(actor);
       }
       return true;
     }
 
     damage(target, amount, source = null, options = {}) {
+      if(target.raidKind) return this.raid.hit(target,amount,source,options);
       if (!target.alive || target.totemUsedAt === this.time ||
           (target.invulnerable > 0 && !options.bypassInvulnerability)) return false;
       if (!options.burn && !options.poison) target.invulnerable = options.storm ? 0.1 : 0.48;
@@ -912,7 +961,7 @@
         if (target.armor === 0) target.armorType = null;
         this.effect('block', target.x, target.y, { text: '格挡', color: '#d5e2eb', ttl: 0.65 });
         this.cue('block', target, target);
-        if (target.isPlayer) this.addEvent((this.terrain ? ITEM_NAMES.boots : ITEM_NAMES.helmet) + '挡住了一次攻击', 'block');
+        if (target.isPlayer) this.addEvent((this.map==='ice' ? ITEM_NAMES.boots : ITEM_NAMES.helmet) + '挡住了一次攻击', 'block');
         return true;
       }
       const absorbed = options.poison ? 0 : Math.min(target.shield, amount);
@@ -934,7 +983,11 @@
         this.addEvent(target.name + ' 的不死图腾生效', 'block');
         return true;
       }
-      if (target.hp <= 0) {
+      if (target.hp <= 0) this.eliminate(target,source);
+      return true;
+    }
+
+    eliminate(target,source,fell=false) {
         target.alive = false;
         target.blazeVolley = null;
         target.burnUntil = 0; target.burnNext = 0; target.burnSource = null;
@@ -947,14 +1000,13 @@
           if (source.isPlayer) this.stats.kills++;
         }
         this.effect('death', target.x, target.y, { radius: 40, color: target.color, ttl: 1.0 });
-        this.addEvent((source ? source.name : '收缩边界') + ' 淘汰了 ' + target.name + (target.isPlayer ? '（你）' : ''), 'kill');
+        this.addEvent((fell ? target.name+' 坠入了虚空' : (source ? source.name : '收缩边界') + ' 淘汰了 ' + target.name) + (target.isPlayer ? '（你）' : ''), 'kill');
         if (target.weapon !== 'fist') {
-          if (target.weapon !== 'ironAxe') this.spawnItem(target.weapon, target.x, target.y);
+          if (!fell && target.weapon !== 'ironAxe' && !(this.raid && WITCH_POTIONS.includes(target.weapon)))
+            this.spawnItem(target.weapon, target.x, target.y);
           this.equipWeapon(target, 'fist');
         }
-        if (target.type === 'slime' && !target.isMiniSlime) this.splitSlime(target);
-      }
-      return true;
+        if (!fell && target.type === 'slime' && !target.isMiniSlime) this.splitSlime(target);
     }
 
     nearbyWeapons(actor) {
@@ -1037,7 +1089,7 @@
         travel = clear;
         shattered = true;
       }
-      for (const actor of this.actors) {
+      for (const actor of this.damageTargets) {
         if (!actor.alive) continue;
         const halfSize = actorRadius(actor) + BOTTLE_RADIUS;
         const dx = actor.x - bottle.x, dy = actor.y - bottle.y;
@@ -1063,16 +1115,16 @@
       this.effect('potionSplash', bottle.x, bottle.y, { potionType: bottle.type, radius: POTION_RADIUS, ttl: 0.32 });
       this.cue('potionBreak', bottle, source);
       // A splash hits actors present at shatter; newly split children are born afterward.
-      for (const actor of this.actors.filter(candidate => candidate.alive)) {
+      for (const actor of this.damageTargets.filter(candidate => candidate.alive && candidate.raidKind!=='crystal')) {
         const r = actorRadius(actor);
         const closest = { x: clamp(bottle.x, actor.x - r, actor.x + r), y: clamp(bottle.y, actor.y - r, actor.y + r) };
-        if (distance(bottle, closest) > POTION_RADIUS || !this.clearLine(bottle, closest)) continue;
+        if (distance(bottle, closest) > POTION_RADIUS || !this.clearLine(bottle, {...closest,raidKind:actor.raidKind})) continue;
         if (bottle.type === 'poisonSplash') {
           if (actor.poisonUntil <= this.time) actor.poisonNext = this.time + 1;
           actor.poisonUntil = this.time + 8;
           actor.poisonSource = bottle.ownerId;
         } else {
-          this.damage(actor, 1.5, source, { magic: true, bypassInvulnerability: true });
+          this.damage(actor, 1.5, source, { magic: true, potion:true, bypassInvulnerability: true });
         }
       }
     }
@@ -1088,13 +1140,14 @@
         projectile.y += Math.sin(projectile.angle) * projectile.speed * dt;
         projectile.ttl -= dt;
         const source = this.actors.find(actor => actor.id === projectile.ownerId);
-        if (!this.clearLine({ x: oldX, y: oldY }, projectile, 2)) {
+        const start = {x:oldX, y:oldY};
+        let victim = this.raid ? this.raid.firstProjectileTarget(start, projectile) : null;
+        if (!victim && !this.clearLine(start, projectile, 2)) {
           if (arrowLike(projectile.type)) this.cue('arrowHit', {x:oldX,y:oldY}, source);
           projectile.ttl = 0;
           continue;
         }
-        let victim = null;
-        for (const actor of this.actors) {
+        if (!this.raid) for (const actor of this.actors) {
           if (!actor.alive || actor.id === projectile.ownerId) continue;
           const dx = projectile.x - oldX, dy = projectile.y - oldY;
           const t = clamp(((actor.x - oldX) * dx + (actor.y - oldY) * dy) / (dx * dx + dy * dy || 1), 0, 1);
@@ -1103,14 +1156,15 @@
         if (victim) {
           if (arrowLike(projectile.type)) this.cue('arrowHit', victim, source);
           if (projectile.type === 'fireball') {
-            this.ignite(victim, projectile.ownerId);
+            if(victim.raidKind==='crystal') this.damage(victim,1,source);
+            else this.ignite(victim, projectile.ownerId);
           } else {
             const knockback = projectile.type === 'snowball' ? 340 : projectile.type === 'slowArrow' ? 0 : 100;
             const hit = this.damage(victim, projectile.damage, source, { knockback });
             if (projectile.type === 'slowArrow' && hit && victim.alive) victim.slowRemaining = 5;
             if (projectile.type === 'firework') {
               this.effect('explosion', victim.x, victim.y, { radius: 72, color: '#ff997d', ttl: 0.45 });
-              for (const other of this.actors) {
+              for (const other of this.damageTargets) {
                 if (other.alive && other !== victim && other !== source && distance(victim, other) < 72 && this.clearLine(victim, other))
                   this.damage(other, 0.5, source, { knockback: 145 });
               }
@@ -1118,7 +1172,8 @@
           }
           projectile.ttl = 0;
         }
-        if (projectile.x < WORLD.border || projectile.x > WORLD.width - WORLD.border || projectile.y < WORLD.border || projectile.y > WORLD.height - WORLD.border) {
+        const border = this.raid ? 0 : WORLD.border;
+        if (projectile.x < border || projectile.x > WORLD.width - border || projectile.y < border || projectile.y > WORLD.height - border) {
           if (!victim && arrowLike(projectile.type)) this.cue('arrowHit', {x:oldX,y:oldY}, source);
           projectile.ttl = 0;
         }
@@ -1127,11 +1182,24 @@
     }
 
     clearLine(from, to, radius = 0) {
+      if(this.raid) {
+        const support=p=>p.base || (p.raidKind==='dragon' ? this.terrain.supportAt(p.x,p.y) : null);
+        return this.terrain.segmentClear(from.x,from.y,to.x,to.y,radius,support(from),support(to));
+      }
       return !this.terrain || this.terrain.segmentClear(from.x, from.y, to.x, to.y, radius);
     }
 
     checkEnd() {
       if (this.finished) return;
+      if(this.raid) {
+        const won=!this.raid.dragon.alive;
+        if(won || this.remaining===0) {
+          this.finished=true;this.status=won?'won':'lost';this.winner=won?this.player:this.raid.dragon;
+          if(won) this.player.rank=1;
+          this.addEvent(won?'末影龙被击败 · 玩家阵营胜利':'队伍全灭 · 末影龙胜利',won?'win':'lose');
+        } else if(!this.player.alive) this.status='spectating';
+        return;
+      }
       const survivors = this.actors.filter(actor => actor.alive);
       const playerHasAllies = this.player.type === 'slime' && survivors.some(actor => actor.type === 'slime');
       const slimeVictory = survivors.length > 0 && survivors.every(actor => actor.type === 'slime');
