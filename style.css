@@ -145,6 +145,14 @@ dialog::backdrop { background: #06120cbe; }
 dialog h2 { font-size: 20px; margin-bottom: 7px; }
 .dialog-close { position: absolute; top: 8px; right: 12px; font-size: 22px; border: 0; background: none; }
 dialog p { font-size: 12px; }
+#cheatDialog { width: min(320px,90vw); }
+#cheatDialog .cheat-toggle { display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--line); }
+#cheatDialog input { width:19px; height:19px; accent-color:var(--green); }
+#cheatDialog label[for] { display:block; margin-top:14px; }
+.cheat-items { display:flex; gap:8px; margin-top:4px; }
+.cheat-items select { flex:1; min-width:0; }
+#cheatFeedback { min-height:1.5em; margin:6px 0; }
+.touch-battle #cheatBtn { min-height:44px; }
 .control-list div { display: flex; justify-content: space-between; gap: 18px; padding: 5px 0; font-size: 12px; }
 .control-list dd { margin: 0; }
 .help-note { border-top: 1px solid var(--line); padding-top: 12px; }

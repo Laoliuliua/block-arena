@@ -262,7 +262,7 @@
       y: touchMode ? stick.y : Number(down('KeyS', 'ArrowDown')) - Number(down('KeyW', 'ArrowUp')),
       aimX, aimY,
       shoot: !game.player.blazeVolley && activeHand(game.player.weapon) && (held.shoot.size > 0 || down('KeyJ', 'KeyK') || pendingActions.has('shoot')),
-      skill: game.player.type !== 'blaze' && (held.skill.size > 0 || down('KeyQ') || pendingActions.has('skill')),
+      skill: game.player.type !== 'blaze' && (pendingActions.has('skill') || (!game.cheats.noCooldown && (held.skill.size > 0 || down('KeyQ')))),
       dash: held.dash.size > 0 || down('Space') || pendingActions.has('dash')
     };
     pendingActions.clear();
@@ -270,6 +270,7 @@
   }
   function updateUI() {
     const p = game.player;
+    $('cheatBtn').disabled = !p.alive || game.finished;
     if (knownActorCount !== game.actors.length) {
       buildRoster();
       if (p.isMiniSlime) {
@@ -401,7 +402,7 @@
   }
   addEventListener('keydown', e => {
     if (gameCodes.has(e.code) || e.code === 'Tab' || e.code === 'Enter') setTouchMode(false);
-    if ($('helpDialog').open) return;
+    if ($('helpDialog').open || $('cheatDialog').open) return;
     if (!game.started && e.target !== canvas) return;
     if (gameCodes.has(e.code)) e.preventDefault();
     if (!e.repeat) {
@@ -501,6 +502,31 @@
   $('soundBtn').onclick = () => { sound.setEnabled(!sound.enabled); soundButton(); if (sound.enabled) playUI('click'); };
   addEventListener('pointerdown', () => sound.unlock(), {capture:true,passive:true});
   addEventListener('keydown', () => sound.unlock(), {capture:true});
+  for (const [id,name] of Object.entries(ITEM_NAMES))
+    $('cheatItem').add(new Option(name,id));
+  let resumeAfterCheats=false;
+  $('cheatBtn').onclick=()=>{
+    resumeAfterCheats=game.started && !paused && !game.finished;
+    if (resumeAfterCheats) setPause(true);
+    $('invincible').checked=game.cheats.invincible;
+    $('noCooldown').checked=game.cheats.noCooldown;
+    $('cheatFeedback').textContent='';
+    $('cheatDialog').showModal();
+  };
+  for (const id of ['invincible','noCooldown'])
+    $(id).onchange=()=>{ game.setCheat(id,$(id).checked); updateUI(); };
+  $('grantItem').onclick=()=>{
+    const type=$('cheatItem').value;
+    if (game.grantItem(type)) {
+      $('cheatFeedback').textContent='已获得'+ITEM_NAMES[type];
+      updateUI();
+    }
+  };
+  $('closeCheats').onclick=()=>$('cheatDialog').close();
+  $('cheatDialog').addEventListener('close',()=>{
+    if (resumeAfterCheats && !document.hidden) setPause(false);
+    resumeAfterCheats=false;
+  });
   let resumeAfterHelp = false;
   $('helpBtn').onclick = () => { resumeAfterHelp = game.started && !paused && !game.finished; if (resumeAfterHelp) setPause(true); $('helpDialog').showModal(); };
   $('closeHelpBtn').onclick = $('helpDoneBtn').onclick = () => $('helpDialog').close();

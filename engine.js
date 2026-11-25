@@ -137,6 +137,7 @@
       this.started = false;
       this.countdown = 0;
       this.finished = false;
+      this.cheats = { invincible:false, noCooldown:false };
       this.winner = null;
       this.safeInset = WORLD.border;
       this.nextDrop = this.map === 'third' ? 9 : 12;
@@ -338,6 +339,7 @@
       while (remaining > 0.00001) {
         const step = Math.min(remaining, 1 / 60);
         this._step(step, input);
+        if (this.cheats.noCooldown && input.skill) input = {...input,skill:false};
         remaining -= step;
       }
     }
@@ -532,6 +534,11 @@
       if (this.terrain) {
         this.terrain.moveActor(actor, dx, dy, actorRadius(actor));
         if(this.raid && actor.alive && !this.terrain.touchesLand(actor.x,actor.y,actorRadius(actor))) {
+          if (actor === this.player && this.cheats.invincible) {
+            const shore = this.terrain.safePosition(actor.x,actor.y);
+            actor.x=shore.x; actor.y=shore.y; actor.vx=actor.vy=0;
+            return;
+          }
           actor.hp=0;
           this.eliminate(actor,null,true);
         }
@@ -878,7 +885,7 @@
       this.fireProjectile(actor, angle, 'fireball');
       if (--volley.left === 0) {
         actor.blazeVolley = null;
-        actor.skillCooldown = CHARACTERS.blaze.skillCooldown * (actor.isPlayer ? 1 : 1.5);
+        actor.skillCooldown = actor.isPlayer && this.cheats.noCooldown ? 0 : CHARACTERS.blaze.skillCooldown * (actor.isPlayer ? 1 : 1.5);
       } else if (!actor.isPlayer) volley.next = this.time + 0.3;
       return true;
     }
@@ -902,7 +909,7 @@
         if (!actor.isPlayer) this.fireBlazeShot(actor);
         return true;
       }
-      actor.skillCooldown = CHARACTERS[actor.type].skillCooldown * (actor.isPlayer || actor.type === 'vindicator' || actor.type === 'witch' ? 1 : 1.5);
+      actor.skillCooldown = actor.isPlayer && this.cheats.noCooldown ? 0 : CHARACTERS[actor.type].skillCooldown * (actor.isPlayer || actor.type === 'vindicator' || actor.type === 'witch' ? 1 : 1.5);
       const enemies = this.damageTargets.filter(other => other !== actor && other.alive);
       if (actor.type === 'creeper') {
         this.effect('explosion', actor.x, actor.y, { radius: 128, ttl: 0.55, color: '#c4fa85' });
@@ -944,6 +951,7 @@
     }
 
     damage(target, amount, source = null, options = {}) {
+      if (target === this.player && this.cheats.invincible) return false;
       if(target.raidKind) return this.raid.hit(target,amount,source,options);
       if (!target.alive || target.totemUsedAt === this.time ||
           (target.invulnerable > 0 && !options.bypassInvulnerability)) return false;
@@ -1013,6 +1021,36 @@
       return this.items.filter(item => isWeapon(item.type) && distance(actor, item) <= 29 && this.clearLine(actor, item));
     }
 
+    setCheat(name, enabled) {
+      if (!Object.hasOwn(this.cheats,name)) return;
+      this.cheats[name]=!!enabled;
+      if (name==='noCooldown' && enabled) this.player.skillCooldown=0;
+    }
+
+    grantItem(type) {
+      const actor=this.player;
+      if (this.finished || !actor.alive || !Object.hasOwn(ITEM_NAMES,type)) return false;
+      this.applyItem(actor,type);
+      if (isWeapon(type) || type==='ironAxe')
+        actor.weaponPickupContacts=this.nearbyWeapons(actor).map(i=>i.id);
+      this.addEvent('获得了 '+ITEM_NAMES[type],'pickup');
+      return true;
+    }
+
+    applyItem(actor,type) {
+      if (isWeapon(type) || type==='ironAxe') this.equipWeapon(actor,type);
+      else if (type==='totem') actor.hasTotem=true;
+      else if (isArmor(type)) {actor.armor=1; actor.armorType=type;}
+      else if (type==='sharpBook') actor.meleeBonus+=0.25;
+      else if (type==='powerBook') actor.rangedBonus+=0.25;
+      else if (type==='regenPotion') {actor.regenTicks=8; actor.regenNext=this.time+1;}
+      else if (snowHealing[type]) actor.hp=Math.min(actor.maxHp,actor.hp+snowHealing[type]);
+      else {
+        actor.hp=Math.min(actor.maxHp,actor.hp+(type==='enchanted'?3:1));
+        actor.shield=Math.max(actor.shield,type==='enchanted'?2:1);
+      }
+    }
+
     pickUp(actor) {
       if (!actor.alive) return;
       // A pile can replace the hand once per entry, never once per frame. Contacts
@@ -1038,20 +1076,7 @@
         if (item.type === 'enchanted' && actor.hp >= actor.maxHp && actor.shield >= 2) continue;
         if (snowHealing[item.type] && actor.hp >= actor.maxHp) continue;
         if (item.type === 'regenPotion' && actor.hp >= actor.maxHp) continue;
-        if (isWeapon(item.type)) this.equipWeapon(actor, item.type);
-        else if (item.type === 'totem') actor.hasTotem = true;
-        else if (isArmor(item.type)) {
-          actor.armor = 1;
-          actor.armorType = item.type;
-        }
-        else if (item.type === 'sharpBook') actor.meleeBonus += 0.25;
-        else if (item.type === 'powerBook') actor.rangedBonus += 0.25;
-        else if (item.type === 'regenPotion') { actor.regenTicks = 8; actor.regenNext = this.time + 1; }
-        else if (snowHealing[item.type]) actor.hp = Math.min(actor.maxHp, actor.hp + snowHealing[item.type]);
-        else {
-          actor.hp = Math.min(actor.maxHp, actor.hp + (item.type === 'enchanted' ? 3 : 1));
-          actor.shield = Math.max(actor.shield, item.type === 'enchanted' ? 2 : 1);
-        }
+        this.applyItem(actor,item.type);
         this.items.splice(index, 1);
         const sound = isArmor(item.type) ? 'equip' : item.type === 'sharpBook' || item.type === 'powerBook' ? 'enchant'
           : item.type === 'regenPotion' ? 'drink'

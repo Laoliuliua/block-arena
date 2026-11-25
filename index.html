@@ -38,7 +38,7 @@
       <section class="arena-column" aria-label="对战区域">
         <div class="arena-toolbar">
           <strong><i class="live-dot"></i><span id="mapTitle">林间水池</span></strong>
-          <div class="match-time"><span id="phaseLabel">待开局</span><time id="timer">00:00</time><button id="pauseBtn" aria-label="暂停游戏" title="暂停 / 继续（Esc）">Ⅱ</button></div>
+          <div class="match-time"><span id="phaseLabel">待开局</span><time id="timer">00:00</time><button id="cheatBtn" aria-haspopup="dialog">作弊</button><button id="pauseBtn" aria-label="暂停游戏" title="暂停 / 继续（Esc）">Ⅱ</button></div>
         </div>
         <div class="arena-stage"><div class="arena-wrap" id="arenaWrap">
           <canvas id="arena" width="720" height="960" tabindex="0" aria-label="对战场地"></canvas>
@@ -71,6 +71,16 @@
       </aside>
     </main>
   </div>
+  <dialog id="cheatDialog" aria-labelledby="cheatTitle">
+    <h2 id="cheatTitle">作弊菜单</h2>
+    <p>仅对本局玩家生效。</p>
+    <label class="cheat-toggle">玩家无敌<input id="invincible" type="checkbox"></label>
+    <label class="cheat-toggle">角色技能无冷却<input id="noCooldown" type="checkbox"></label>
+    <label for="cheatItem">选择道具</label>
+    <div class="cheat-items"><select id="cheatItem"></select><button id="grantItem" class="secondary-button">获得</button></div>
+    <p id="cheatFeedback" role="status"></p>
+    <button id="closeCheats" class="primary-button">完成</button>
+  </dialog>
   <dialog id="helpDialog">
     <button id="closeHelpBtn" class="dialog-close" aria-label="关闭">×</button><h2>操作说明</h2>
     <p id="matchRules"></p>
